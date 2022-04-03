@@ -11,25 +11,25 @@ E_max = 60
 #odour_vector_length = 100 not needed i suppose
 
 class Node:
-   def __init__(self, data, parent):
-      self.energy = random.randint(5,60)
-      self.parent = parent 
-      self.nodes = []
-      self.data = data
-      self.odour = []
+    def __init__(self, data, parent):
+        self.energy = random.randint(5,60)
+        self.parent = parent 
+        self.nodes = []
+        self.data = data
+        self.odour = []
 
-   def insert(self, node):
-      self.nodes.append(node)
-      node.setParent(self)
+    def insert(self, node):
+        self.nodes.append(node)
+        node.setParent(self)
 
-   def setParent(self,node):
+    def setParent(self,node):
        self.parent = node
 
-   def printTree(self):
-      print(self.data)
-      for node in self.nodes:
-          if isinstance(node,Nest) == False:
-            self.node.printTree()
+    def printTree(self):
+        print(self.data)
+        for node in self.nodes:
+            if isinstance(node,Nest) == False:
+                self.node.printTree()
     
     def produce_ant(self):
         return (numpy.arctan(self.energy))/numpy.pi + 0.5
@@ -58,7 +58,7 @@ class Ant:
         r = random.randint(0,100)
         return r < (self.energy/E_max * 100)
 
-class Edge    
+class Edge:    
     def __init__(self, node: Node,nest: Nest):
         self.node = node
         self.nest = nest
@@ -71,7 +71,7 @@ class Edge
         self.pheromone = (1 - EVAPORATE_RATE) * self.pheromone
 
 def move_ant(a:Ant , n:Node): 
-
+    pass
 def fitness(sentence):
     words = list(sentence.split(" "))
     configuration_sum = 0
