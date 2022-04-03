@@ -35,18 +35,18 @@ def lesk(word, sentence):
         if overlap > maxoverlap:
             maxoverlap = overlap
             bestsense = sense
-    return bestsense
+    return (maxoverlap,bestsense)
 
 
-sentence = "I want to go to watch football game in the street"
-word = "game"
+#sentence = "I want to go to watch football game in the street"
+#word = "game"
 
-a = lesk(word, sentence)
-print("\n\nSynset:", a)
-if a is not None:
-    print("Meaning:", a.definition())
-    num = 0
-    print("\nExamples:")
-    for i in a.examples():
-        num = num + 1
-        print(str(num) + '.' + ')', i)
+# a = lesk(word, sentence)
+# print("\n\nSynset:", a)
+# if a is not None:
+#     print("Meaning:", a.definition())
+#     num = 0
+#     print("\nExamples:")
+#     for i in a.examples():
+#         num = num + 1
+#         print(str(num) + '.' + ')', i)
