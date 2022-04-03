@@ -1,6 +1,5 @@
 from nltk.corpus import wordnet
 from nltk import word_tokenize
-import sys
 from nltk.corpus import stopwords
 
 STOPWORDS = set(stopwords.words('english'))
@@ -31,16 +30,16 @@ def lesk(word, sentence):
     for sense in wordnet.synsets(word):
         overlap = overlapcontext(sense, sentence)
         extended_gloss = sense.hyponyms() + sense.hypernyms()
-        for h in extended_gloss:
-            overlap += overlapcontext(h, sentence)
+        for hyp in extended_gloss:
+            overlap += overlapcontext(hyp, sentence)
         if overlap > maxoverlap:
             maxoverlap = overlap
             bestsense = sense
     return bestsense
 
 
-sentence = "Enter the Sentence (or) Context :"
-word = "Enter the word :"
+sentence = "I want to go to watch football game in the street"
+word = "game"
 
 a = lesk(word, sentence)
 print("\n\nSynset:", a)
