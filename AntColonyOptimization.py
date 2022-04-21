@@ -2,87 +2,180 @@ import random
 import numpy
 from functools import reduce
 from improved_lesk import lesk
+import enum
 
-CYCLES = 500
-EVAPORATE_RATE = 0.1  # TODO
-DEPOSIT_RATE = 0.1  # TODO
-SENTENCE = ""
+EVAPORATE_RATE = 0.9 #TODO
+DEPOSIT_RATE = 0.9 #TODO
+deltav = 0.9
 E_max = 60
+E_0 = 30
+omega = 25 # ant life duration
+Ea = 16
+max_iterations = 500 #CYCLES
+nodes_list = list()
+ants_list = list()
+edges_list = list()
+nests_list = list()
+odour_length = 100
+ 
+class NodeType(enum.Enum):
+    sense = 1
+    word = 2
+    sentence = 3
+    text = 4
 
-
-# odour_vector_length = 100 not needed i suppose
 
 class Node:
-    def __init__(self, data, parent):
-        self.energy = random.randint(5, 60)
-        self.parent = parent
-        self.nodes = []
+    def __init__(self, data, parent, typeN):
+        self.type = typeN
+        self.energy = 30
+        if(self.type == NodeType.sense):
+            self.odout = #TODO
+        else:
+           # self.energy = random.randint(5,60)
+            self.odour = []
+        self.parent = parent 
+        self.children = []
         self.data = data
-        self.odour = []
+
+    def reduce_energy(self):
+        self.energy = self.energy - 1
 
     def insert(self, node):
-        self.nodes.append(node)
+        self.children.append(node)
         node.setParent(self)
 
-    def setParent(self, node):
-        self.parent = node
-
+    def setParent(self,node):
+       self.parent = node
+    
     def produce_ant(self):
-        return (numpy.arctan(self.energy)) / numpy.pi + 0.5
-
-
-class Nest:
-    def __init__(self, senses, parent):
-        self.senses = senses
-        self.parent = parent
-        self.energy = 0
+        return (numpy.arctan(self.energy))/numpy.pi + 0.5
 
     def eval_f(self, sense):
-        sense_sum = reduce(lambda x: lesk(x, SENTENCE)[0] + lesk(y, SENTENCE)[0], self.senses)
-        return lesk(sense, SENTENCE) / sense_sum
+        sense_sum = reduce(lambda x : lesk(x,SENTENCE)[0] + lesk(y,SENTENCE)[0] , self.senses)       
+        return lesk(sense,SENTENCE)/sense_sum  
 
+# class Nest:
+#     def __init__(self, senses, parent):
+#         self.senses = senses
+#         self.parent = parent
+#         self.energy = 0
+    
+#     def eval_f(self, sense):
+#         sense_sum = reduce(lambda x : lesk(x,SENTENCE)[0] + lesk(y,SENTENCE)[0] , self.senses)       
+#         return lesk(sense,SENTENCE)/sense_sum    
 
 class Ant:
-    def __init__(self, energy, odour):
-        self.lifespan = random.randint(1, 30)
+    def __init__(self, energy, odour, node: Node):
+        self.direction = 1
+        self.lifespan = random.randint(1,30)
         self.energy = energy
-        self.odour = odour  # senses words
+        self.odour = odour  #senses words
+        self.currentNode = node
+        self.nest = node
+        self.nodeChosen = None
+        self.edgeChosen = None
 
-    def eval_f(self, sense):
-        sense_sum = reduce(lambda x, y: lesk(x, SENTENCE)[0] + lesk(y, SENTENCE)[0], self.odour)
-        return lesk(sense, SENTENCE) / sense_sum
+    def change_direction(self):
+        self.direction = self.direction * (-1)
 
     def should_return(self):
-        r = random.randint(0, 100)
-        return r < (self.energy / E_max * 100)
+        r = random.randint(0,100)
+        return r < (self.energy/E_max * 100)
 
+    def is_dead(self):
+        self.energy == 0
 
-class Edge:
-    def __init__(self, node: Node, nest: Nest):
-        self.node = node
-        self.nest = nest
+    def move_ant(self): 
+        if self.currentNode.type != NodeType.sense:
+            #set odour on node
+            odour_deposited = random.shuffle(list(self.odour))
+            odour_deposited = odour_deposited[:len(odour_deposited) * DEPOSIT_RATE]
+            for od in odour_deposited:
+                if(len(self.currentNode.odour) < odour_length):
+                    if random.random() < 0.5:
+                        self.currentNode.odour.append(od)
+                    else:
+                        self.currentNode.odour[random.randint(0,len(self.currentNode.odour))] = od
+                else:
+                    self.currentNode.odour[random.randint(0,len(self.currentNode.odour))] = od
+
+class Edge:    
+    def __init__(self, source: Node, dest: Node):
+        self.source = source
+        self.dest = dest
         self.pheromone = 0
 
     def eval_f(self):
-        return 1 - self.pheromone  # create bridge when 0
+        return 1 - self.pheromone #create bridge when 0
 
     def change_pheromone(self):
         self.pheromone = (1 - EVAPORATE_RATE) * self.pheromone
 
-
-def move_ant(a: Ant, n: Node):
-    pass
-
-
+    
 def fitness(sentence):
     words = list(sentence.split(" "))
     configuration_sum = 0
     for word in words:
-        configuration_sum += lesk(word, sentence)
+        configuration_sum += lesk(word,sentence)
     return configuration_sum
 
-
-def fitness_at_pos(pos, sentence):
+def fitness_at_pos(pos,sentence):
     configuration_sum = 0
     words = list(sentence.split(" "))
-    return lesk(words[pos], sentence)
+    return lesk(words[pos],sentence)
+
+def full_probability(probabilities):
+    r = random.random()
+    sum = 0 
+    for ip,prob in enumerate(probabilities):
+        sum += prob
+        if(r < prob):
+            return ip
+
+def get_neighbours(node: Node):
+    newNeighbours = set()
+    if(node.type == NodeType.sense):
+        for nest in nests_list:
+            if nest.parent != node.parent:
+                newEdge = Edge(node,nest)
+                newNeighbours.append(newEdge,nest)
+
+    return set([(edge,edge.dest) for edge in edges_list if edge.source == node]).union(newNeighbours)
+
+def itereaza():
+    for i in range(0,max_iterations):
+        for ant in [ant for ant in ants_list if ant.is_dead == True]:
+            ant.currentNode.energy = ant.currentNode.energy + ant.energy
+        ants_list = [ant for ant in ants_list if ant.is_dead == False]
+        edges_list = [edge for edge in edges_list if edge.pheromone != 0]
+
+        for node in nodes_list:
+            if node.produce_ant() > random.random():
+                ant = Ant(node)
+                node.reduce_energy()
+                ants_list.append(ant)
+        
+        probabilities = list()
+        for ant in ants_list:
+            if ant.direction == 1:
+                if( (ant.energy /  E_max) > random.random()):
+                    ant.change_direction()
+            eval_sum = 0
+            neighboursRoutes = get_neighbours(ant.currentNode) # TODO
+            if ant.direction == 1:
+                energy_sum = sum([node.energy for _ , node in neighboursRoutes])
+                for (edge,node) in neighboursRoutes:
+                    nodeEval = node.energy / energy_sum
+                    edgeEval = 1 - edge.pheromone
+                    probabilities.append(nodeEval + edgeEval)
+                    eval_sum += nodeEval + edgeEval
+                probabilities = [prob/eval_sum for prob in probabilities]
+                index = full_probability(probabilities)
+                (ant.edgeChosen, ant.nodeChosen) = neighboursRoutes[index]
+            else:
+                sum = 0
+                for (edge,node) in neighboursRoutes:
+                    
+
+#lesk_distance(concept_1, concept_2)
