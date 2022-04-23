@@ -131,7 +131,7 @@ def itereaza():
         edges_list = [edge for edge in edges_list if (edge.pheromone != 0 or edge.edgeType != EdgeType.bridge)]
 
         for node in nodes_list:
-            if node.produce_ant() > random.random():
+            if node.type == NodeType.sense and node.produce_ant() > random.random():
                 ant = Ant(node)
                 node.reduce_energy()
                 ants_list.append(ant)
@@ -255,6 +255,7 @@ def main():
 
     #Scenario    
     for i in range(0,max_iterations):
+        print("Iteration ",i)
         itereaza()
 
     #Print Path
