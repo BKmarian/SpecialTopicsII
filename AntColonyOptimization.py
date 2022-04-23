@@ -23,7 +23,6 @@ odour_length = 100
 nodes_list = list()
 ants_list = list()
 edges_list = list()
-nests_list = list()
 bridges_list = list()
 #nodes_neighbours = dict() #Node,set([Node])
 
@@ -146,7 +145,6 @@ def cleanup():
     nodes_list = list()
     ants_list = list()
     edges_list = list()
-    nests_list = list()
     bridges_list = list()
 
 def itereaza():
@@ -263,11 +261,29 @@ def main():
     dataset = extract_sentences_from_xml(xml_path)
 
     #Create graph
+    root = Node(None,None,NodeType.text)
+    nodes_list.append(root)
     for entry in dataset:
+        sentence = Node(None,root,NodeType.sentence)
+        nodes_list.append(sentence)
+        root.insert(sentence)
+        for word in entry["wnsn"]:
+            word_node = Node(None,sentence,NodeType.word)
+            sentence.insert(word_node)
+            nodes_list.append(word_node)
+            for sense in wordnet.synsets(word):
+                sense_node = Node(sense,word_node,NodeType.sense)
+                nodes_list.append(sense_node)
+                word_node.insert(sense_node)
 
+    #Scenario    
+    for i in range(0,max_iterations):
+        itereaza()
 
-        #Scenariu    
-        for i in range(0,max_iterations):
-            itereaza()
-
-        #Printeza drum
+    #Print Path
+    final_senses = list()
+    words = [node for node in nodes_list if node.type == NodeType.word]
+    for word in words:
+        sense = max([nest for nest in word.children],key=lambda nest:nest.energy)
+        final_senses.append(sense)
+    print(final_senses)
