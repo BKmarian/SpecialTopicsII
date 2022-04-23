@@ -2,11 +2,11 @@ from nltk.corpus import wordnet
 from nltk import word_tokenize
 from nltk.corpus import stopwords
 import nltk
-nltk.download('stopwords')
-nltk.download('wordnet')
-nltk.download('omw-1.4')
-nltk.download('punkt')
-nltk.download('wordnet_ic')
+# nltk.download('stopwords')
+# nltk.download('wordnet')
+# nltk.download('omw-1.4')
+# nltk.download('punkt')
+# nltk.download('wordnet_ic')
 STOPWORDS = set(stopwords.words('english'))
 
 def overlapcontext(synset, sentence):
@@ -55,9 +55,9 @@ def lesk_distance(concept_i, concept_j):
     
 
 
-concept_1 = wordnet.synset('friday.n.01')
-concept_2 = wordnet.synset('state.n.01')
-print(lesk_distance(concept_1, concept_2))
+# concept_1 = wordnet.synset('friday.n.01')
+# concept_2 = wordnet.synset('state.n.01')
+# print(lesk_distance(concept_1, concept_2))
 
 
 #sentence = "I want to go to watch football game in the street"

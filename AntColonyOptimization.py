@@ -47,6 +47,13 @@ class Node:
         self.parent = parent 
         self.children = []
 
+    def printT(self,depth):
+        for i in range(0,depth):
+            print("/t")
+        print(self.type)
+        for child in self.children:
+            child.printT(depth + 1)
+
     def reduce_energy(self):
         self.energy = self.energy - 1
 
@@ -61,11 +68,11 @@ class Node:
         return (numpy.arctan(self.energy))/numpy.pi + 0.5
 
 class Ant:
-    def __init__(self, energy, odour, node: Node):
+    def __init__(self, node: Node):
         self.direction = 1
         self.lifespan = omega
-        self.energy = energy
-        self.odour = odour  #senses words
+        self.energy = 1
+        self.odour = node.odour  #senses words
         self.currentNode = node
         self.nest = node
         self.nodeChosen = None
@@ -80,7 +87,7 @@ class Ant:
 
     def is_dead(self):
         self.lifespan == 0
-
+        
 class Edge:    
     def __init__(self, source: Node, dest: Node, edgeType: EdgeType):
         self.source = source
@@ -113,12 +120,6 @@ def get_neighbours(node: Node):
     #             newNeighbours.append(newEdge,nest)
 
     return set([(edge,edge.dest) for edge in edges_list if edge.source == node]).union([(edge,edge.source) for edge in edges_list if edge.dest == node])
-
-def cleanup():
-    nodes_list = list()
-    ants_list = list()
-    edges_list = list()
-    bridges_list = list()
 
 def itereaza():
     for i in range(0,max_iterations):
@@ -153,8 +154,6 @@ def itereaza():
             else:
                 suma = sum([lesk_distance(wordnet.synsets(node.odour),wordnet.synsets(ant.odour)) for _ , node in neighboursRoutes])
                 for (edge,node) in neighboursRoutes:
-                    #synsets_edge = wordnet.synsets(edge.odour)
-                    #synsets_node = wordnet.synsets(node.odour)
                     edgeEval = edge.pheromone
                     nodeEval = lesk_distance(wordnet.synsets(node.odour) , wordnet.synsets(ant.odour)) / suma
                     probabilities.append(nodeEval + edgeEval)
@@ -228,7 +227,7 @@ def extract_sentences_from_xml(xml_path):
     return dataset
 
 def main():
-    xml_path = os.path.join('semcor', 'semcor', 'brown1', 'tagfiles', 'br-a01.xml')
+    xml_path = os.path.join('archive','semcor', 'semcor', 'brown1', 'tagfiles', 'br-a01.xml')
     dataset = extract_sentences_from_xml(xml_path)
 
     #Create graph
@@ -238,7 +237,8 @@ def main():
         sentence = Node(None,root,NodeType.sentence)
         nodes_list.append(sentence)
         root.insert(sentence)
-        for word in entry["wnsn"]:
+        for word in entry:
+            word = word["wnsn"]
             word_node = Node(None,sentence,NodeType.word)
             sentence.insert(word_node)
             nodes_list.append(word_node)
@@ -246,6 +246,7 @@ def main():
                 sense_node = Node(sense,word_node,NodeType.sense)
                 nodes_list.append(sense_node)
                 word_node.insert(sense_node)
+    root.printT(0)
 
     #Scenario    
     for i in range(0,max_iterations):
@@ -258,3 +259,5 @@ def main():
         sense = max([nest for nest in word.children],key=lambda nest:nest.energy)
         final_senses.append(sense)
     print(final_senses)
+
+main()
