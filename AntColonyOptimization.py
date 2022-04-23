@@ -1,6 +1,6 @@
 import random
 from functools import reduce
-from improved_lesk import lesk,lesk_distance
+from improved_lesk import lesk_distance
 import enum
 import os
 import pdb
@@ -43,7 +43,6 @@ class Node:
         if(self.type == NodeType.sense):
             self.odour = data
         else:
-           # self.energy = random.randint(5,60)
             self.odour = []
         self.parent = parent 
         self.children = []
@@ -126,7 +125,7 @@ def itereaza():
         for ant in [ant for ant in ants_list if ant.is_dead == True]:
             ant.currentNode.energy = ant.currentNode.energy + ant.energy
         ants_list = [ant for ant in ants_list if ant.is_dead == False]
-        edges_list = [edge for edge in edges_list if (edge.pheromone != 0 or edge.edgeType != EdgeType.bridge]
+        edges_list = [edge for edge in edges_list if (edge.pheromone != 0 or edge.edgeType != EdgeType.bridge)]
 
         for node in nodes_list:
             if node.produce_ant() > random.random():
@@ -184,9 +183,7 @@ def itereaza():
             ant.edgeChosen = ant.edgeChosen.pheromone + pheromone_deposit #update pheromone
             ant.energy = ant.energy + min(ant.nodeChosen.energy , Ea) #update energy
             if ant.currentNode.parent != ant.nest.parent and ant.currentNode.type == NodeType.sense:
-                new_bridge = new Edge(ant.currentNode,ant.nest,EdgeType.bridge)
-                # nodes_neighbours.get(ant.currentNode).append(ant.nest)
-                # nodes_neighbours.get(ant.nest).append(ant.currentNode)
+                new_bridge = Edge(ant.currentNode,ant.nest,EdgeType.bridge)
                 edges_list.append(new_bridge)
 
         for edge in edges_list:

@@ -1,7 +1,12 @@
 from nltk.corpus import wordnet
 from nltk import word_tokenize
 from nltk.corpus import stopwords
-
+import nltk
+nltk.download('stopwords')
+nltk.download('wordnet')
+nltk.download('omw-1.4')
+nltk.download('punkt')
+nltk.download('wordnet_ic')
 STOPWORDS = set(stopwords.words('english'))
 
 def overlapcontext(synset, sentence):
