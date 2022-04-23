@@ -61,20 +61,6 @@ class Node:
     def produce_ant(self):
         return (numpy.arctan(self.energy))/numpy.pi + 0.5
 
-    def eval_f(self, sense):
-        sense_sum = reduce(lambda x : lesk(x,SENTENCE)[0] + lesk(y,SENTENCE)[0] , self.senses)       
-        return lesk(sense,SENTENCE)/sense_sum  
-
-# class Nest:
-#     def __init__(self, senses, parent):
-#         self.senses = senses
-#         self.parent = parent
-#         self.energy = 0
-    
-#     def eval_f(self, sense):
-#         sense_sum = reduce(lambda x : lesk(x,SENTENCE)[0] + lesk(y,SENTENCE)[0] , self.senses)       
-#         return lesk(sense,SENTENCE)/sense_sum    
-
 class Ant:
     def __init__(self, energy, odour, node: Node):
         self.direction = 1
@@ -110,18 +96,6 @@ class Edge:
         self.pheromone = (1 - EVAPORATE_RATE) * self.pheromone
 
     
-def fitness(sentence):
-    words = list(sentence.split(" "))
-    configuration_sum = 0
-    for word in words:
-        configuration_sum += lesk(word,sentence)
-    return configuration_sum
-
-def fitness_at_pos(pos,sentence):
-    configuration_sum = 0
-    words = list(sentence.split(" "))
-    return lesk(words[pos],sentence)
-
 def full_probability(probabilities):
     r = random.random()
     sum = 0 
