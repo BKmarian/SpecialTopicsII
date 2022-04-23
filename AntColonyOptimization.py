@@ -5,7 +5,7 @@ import enum
 import os
 import pdb
 import xml.etree.ElementTree as etree
-import numpy as np
+import numpy
 from nltk.corpus import wordnet, wordnet_ic
 from tqdm import trange
 ic_brown = wordnet_ic.ic('ic-brown.dat')
@@ -19,12 +19,9 @@ deltav = 0.9
 max_iterations = 500 #CYCLES
 pheromone_deposit = 10 #TODO
 odour_length = 100
-
-nodes_list = list()
-ants_list = list()
-edges_list = list()
-bridges_list = list()
 #nodes_neighbours = dict() #Node,set([Node])
+nodes_list = list()
+edges_list = list()
 
 class NodeType(enum.Enum):
     sense = 1
@@ -49,7 +46,7 @@ class Node:
 
     def printT(self,depth):
         for i in range(0,depth):
-            print("/t")
+            print("    ", end =" ")
         print(self.type)
         for child in self.children:
             child.printT(depth + 1)
@@ -103,14 +100,16 @@ class Edge:
 
     
 def full_probability(probabilities):
+    #print(probabilities)
     r = random.random()
     sum = 0 
     for ip,prob in enumerate(probabilities):
         sum += prob
         if(r < prob):
             return ip
+    return len(probabilities) - 1
 
-def get_neighbours(node: Node):
+def get_neighbours(node: Node,edges_list):
     #return nodes_neighbours.get(node)
     #newNeighbours = set()
     # if(node.type == NodeType.sense):
@@ -119,9 +118,12 @@ def get_neighbours(node: Node):
     #             newEdge = Edge(node,nest,EdgeType.bridge)
     #             newNeighbours.append(newEdge,nest)
 
-    return set([(edge,edge.dest) for edge in edges_list if edge.source == node]).union([(edge,edge.source) for edge in edges_list if edge.dest == node])
+    return [(edge,edge.dest) for edge in edges_list if edge.source == node] + [(edge,edge.source) for edge in edges_list if edge.dest == node]
 
 def itereaza():
+    ants_list = list()
+    global edges_list
+    #bridges_list = list()
     for i in range(0,max_iterations):
         for ant in [ant for ant in ants_list if ant.is_dead == True]:
             ant.currentNode.energy = ant.currentNode.energy + ant.energy
@@ -140,7 +142,7 @@ def itereaza():
                 if(ant.should_return()):
                     ant.change_direction()
             eval_sum = 0
-            neighboursRoutes = get_neighbours(ant.currentNode) # TODO
+            neighboursRoutes = get_neighbours(ant.currentNode,edges_list) 
             if ant.direction == 1:
                 energy_sum = sum([node.energy for _ , node in neighboursRoutes])
                 for (edge,node) in neighboursRoutes:
@@ -148,9 +150,6 @@ def itereaza():
                     edgeEval = 1 - edge.pheromone
                     probabilities.append(nodeEval + edgeEval)
                     eval_sum += nodeEval + edgeEval
-                probabilities_new = [prob/eval_sum for prob in probabilities]
-                index = full_probability(probabilities_new)
-                (ant.edgeChosen, ant.nodeChosen) = neighboursRoutes[index]
             else:
                 suma = sum([lesk_distance(wordnet.synsets(node.odour),wordnet.synsets(ant.odour)) for _ , node in neighboursRoutes])
                 for (edge,node) in neighboursRoutes:
@@ -159,14 +158,14 @@ def itereaza():
                     probabilities.append(nodeEval + edgeEval)
                     eval_sum += nodeEval + edgeEval
 
-                probabilities_new = [prob/eval_sum for prob in probabilities]
-                index = full_probability(probabilities_new)
-                (ant.edgeChosen, ant.nodeChosen) = neighboursRoutes[index]
+            probabilities_new = [ float(prob/eval_sum) for prob in probabilities]
+            index = full_probability(probabilities_new)
+            (ant.edgeChosen, ant.nodeChosen) = neighboursRoutes[index]
 
             ant.currentNode = ant.nodeChosen
             ant.lifespan = ant.lifespan - 1
         
-            if ant.currentNode.type != NodeType.SENS:
+            if ant.currentNode.type != NodeType.sense:
                 depositedOdour = random.shuffle(ant.odour)
                 depositedOdour = depositedOdour[:len(depositedOdour) * deltav]
                 for elem in depositedOdour:
@@ -229,6 +228,8 @@ def extract_sentences_from_xml(xml_path):
 def main():
     xml_path = os.path.join('archive','semcor', 'semcor', 'brown1', 'tagfiles', 'br-a01.xml')
     dataset = extract_sentences_from_xml(xml_path)
+    global nodes_list
+    global edges_list
 
     #Create graph
     root = Node(None,None,NodeType.text)
@@ -236,17 +237,21 @@ def main():
     for entry in dataset:
         sentence = Node(None,root,NodeType.sentence)
         nodes_list.append(sentence)
+        edges_list.append(Edge(root,sentence,EdgeType.edge))
         root.insert(sentence)
         for word in entry:
             word = word["wnsn"]
+            #if(len(wordnet.synsets(word)) != 0): #TODO
             word_node = Node(None,sentence,NodeType.word)
+            edges_list.append(Edge(sentence,word_node,EdgeType.edge))
             sentence.insert(word_node)
             nodes_list.append(word_node)
             for sense in wordnet.synsets(word):
                 sense_node = Node(sense,word_node,NodeType.sense)
+                edges_list.append(Edge(word_node,sense_node,EdgeType.edge))
                 nodes_list.append(sense_node)
                 word_node.insert(sense_node)
-    root.printT(0)
+    #root.printT(0)
 
     #Scenario    
     for i in range(0,max_iterations):
@@ -260,4 +265,5 @@ def main():
         final_senses.append(sense)
     print(final_senses)
 
-main()
+if __name__ == "__main__":
+    main()
