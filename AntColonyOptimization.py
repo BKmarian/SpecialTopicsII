@@ -1,23 +1,30 @@
 import random
-import numpy
 from functools import reduce
-from improved_lesk import lesk
+from improved_lesk import lesk,lesk_distance
 import enum
+import os
+import pdb
+import xml.etree.ElementTree as etree
+import numpy as np
+from nltk.corpus import wordnet, wordnet_ic
+from tqdm import trange
+ic_brown = wordnet_ic.ic('ic-brown.dat')
 
 EVAPORATE_RATE = 0.9 #TODO
-DEPOSIT_RATE = 0.2 #TODO
-deltav = 0.9
 E_max = 60
 E_0 = 30
 omega = 25 # ant life duration
-Ea = 16
+Ea = 16 #TODO energy_taken_by_ant_when arriving on node
+deltav = 0.9
 max_iterations = 500 #CYCLES
+pheromone_deposit = 10 #TODO
+odour_length = 100
+
 nodes_list = list()
 ants_list = list()
 edges_list = list()
 nests_list = list()
 bridges_list = list()
-odour_length = 100
 #nodes_neighbours = dict() #Node,set([Node])
 
 class NodeType(enum.Enum):
@@ -33,15 +40,14 @@ class EdgeType(enum.Enum):
 class Node:
     def __init__(self, data, parent, typeN):
         self.type = typeN
-        self.energy = 30
+        self.energy = E_0
         if(self.type == NodeType.sense):
-            self.odout = #TODO
+            self.odour = data
         else:
            # self.energy = random.randint(5,60)
             self.odour = []
         self.parent = parent 
         self.children = []
-        self.data = data
 
     def reduce_energy(self):
         self.energy = self.energy - 1
@@ -91,20 +97,6 @@ class Ant:
     def is_dead(self):
         self.lifespan == 0
 
-    def move_ant(self): 
-        if self.currentNode.type != NodeType.sense:
-            #set odour on node
-            odour_deposited = random.shuffle(list(self.odour))
-            odour_deposited = odour_deposited[:len(odour_deposited) * DEPOSIT_RATE]
-            for od in odour_deposited:
-                if(len(self.currentNode.odour) < odour_length):
-                    if random.random() < 0.5:
-                        self.currentNode.odour.append(od)
-                    else:
-                        self.currentNode.odour[random.randint(0,len(self.currentNode.odour))] = od
-                else:
-                    self.currentNode.odour[random.randint(0,len(self.currentNode.odour))] = od
-
 class Edge:    
     def __init__(self, source: Node, dest: Node, edgeType: EdgeType):
         self.source = source
@@ -149,6 +141,13 @@ def get_neighbours(node: Node):
     #             newNeighbours.append(newEdge,nest)
 
     return set([(edge,edge.dest) for edge in edges_list if edge.source == node]).union([(edge,edge.source) for edge in edges_list if edge.dest == node])
+
+def cleanup():
+    nodes_list = list()
+    ants_list = list()
+    edges_list = list()
+    nests_list = list()
+    bridges_list = list()
 
 def itereaza():
     for i in range(0,max_iterations):
@@ -197,8 +196,21 @@ def itereaza():
             ant.currentNode = ant.nodeChosen
             ant.lifespan = ant.lifespan - 1
         
+            if ant.currentNode.type != NodeType.SENS:
+                depositedOdour = random.shuffle(ant.odour)
+                depositedOdour = depositedOdour[:len(depositedOdour) * deltav]
+                for elem in depositedOdour:
+                    if len(ant.currentNode.odour) < odour_length:
+                        if random.random() < 0.5:
+                            ant.currentNode.odour.append(elem)
+                        else:
+                            ant.currentNode.odour[random.randint(0,len(ant.currentNode.odour))] = elem
+                    else:
+                            ant.currentNode.odour[random.randint(0,len(ant.currentNode.odour))] = elem
+
         for ant in ants_list:
-            ant.edgeChosen = ant.edgeChosen.pheromone * (1 + DEPOSIT_RATE)
+            ant.edgeChosen = ant.edgeChosen.pheromone + pheromone_deposit #update pheromone
+            ant.energy = ant.energy + min(ant.nodeChosen.energy , Ea) #update energy
             if ant.currentNode.parent != ant.nest.parent and ant.currentNode.type == NodeType.sense:
                 new_bridge = new Edge(ant.currentNode,ant.nest,EdgeType.bridge)
                 # nodes_neighbours.get(ant.currentNode).append(ant.nest)
@@ -208,17 +220,6 @@ def itereaza():
         for edge in edges_list:
             edge.change_pheromone()
 
-        #TODO Update odour
-
-import os
-import pdb
-import xml.etree.ElementTree as etree
-import numpy as np
-
-from nltk.corpus import wordnet, wordnet_ic
-from tqdm import trange
-from improved_lesk import lesk_distance
-ic_brown = wordnet_ic.ic('ic-brown.dat')
 
 def pos_map(pos_):
     first_letter = pos_[0].lower()
@@ -261,4 +262,12 @@ def main():
     xml_path = os.path.join('semcor', 'semcor', 'brown1', 'tagfiles', 'br-a01.xml')
     dataset = extract_sentences_from_xml(xml_path)
 
+    #Create graph
     for entry in dataset:
+
+
+        #Scenariu    
+        for i in range(0,max_iterations):
+            itereaza()
+
+        #Printeza drum
