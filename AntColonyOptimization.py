@@ -9,16 +9,18 @@ import xml.etree.ElementTree as etree
 import numpy
 from nltk.corpus import wordnet, wordnet_ic
 from tqdm import trange
+from sklearn.metrics import accuracy_score
+
 ic_brown = wordnet_ic.ic('ic-brown.dat')
 
-EVAPORATE_RATE = 0.9 #TODO
+EVAPORATE_RATE = 0.9
 E_max = 60
 E_0 = 30
 omega = 25 # ant life duration
-Ea = 16 #TODO energy_taken_by_ant_when arriving on node
+Ea = 16 # energy_taken_by_ant_when arriving on node
 deltav = 0.9
 max_iterations = 500 #CYCLES
-pheromone_deposit = 10 #TODO
+pheromone_deposit = 10
 odour_length = 100
 #nodes_neighbours = dict() #Node,set([Node])
 nodes_list = list()
@@ -39,6 +41,7 @@ class Node:
     def __init__(self, sense, parent, typeN):
         self.type = typeN
         self.energy = E_0
+        self.sense = sense
         if(self.type == NodeType.sense):
             words = sense.definition().split(' ')
             self.odour = [word for word in words if word not in STOPWORDS]
@@ -240,6 +243,14 @@ def extract_sentences_from_xml(xml_path):
 def main():
     xml_path = os.path.join('archive','semcor', 'semcor', 'brown1', 'tagfiles', 'br-a01.xml')
     dataset = extract_sentences_from_xml(xml_path)
+    test_results = list()
+    for entry in dataset:
+        for word in entry:
+            if str(word["wnsn"]) == "0":
+                test_results.append("0")
+            else:
+                test_results.append(word["lemma"] + "." + word["pos_nltk"][0] + ".0" + str(word["wnsn"]))
+
     global nodes_list
     global edges_list
 
@@ -254,7 +265,7 @@ def main():
         for word in entry:
             if word["lemma"] in STOPWORDS:
                 continue
-            word = word["wnsn"]
+            word = word["lemma"]
             #if(len(wordnet.synsets(word)) != 0): #TODO
             word_node = Node(None,sentence,NodeType.word)
             edges_list.append(Edge(sentence,word_node,EdgeType.edge))
@@ -274,9 +285,16 @@ def main():
     final_senses = list()
     words = [node for node in nodes_list if node.type == NodeType.word]
     for word in words:
-        sense = max([nest for nest in word.children],key=lambda nest:nest.energy)
-        final_senses.append(sense)
+        if word in STOPWORDS:
+            final_senses.append("0")
+        else:
+            nest = max([nest for nest in word.children],key=lambda nest:nest.energy)
+            final_senses.append(nest.sense.name())
     print(final_senses)
+    print(test_results)
+
+    print("Accuracy_Score: ")
+    print(accuracy_score(final_senses, test_results))
 
 if __name__ == "__main__":
     main()
