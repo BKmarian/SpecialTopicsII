@@ -9,7 +9,7 @@ import xml.etree.ElementTree as etree
 import numpy
 from nltk.corpus import wordnet, wordnet_ic
 from tqdm import trange
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score,f1_score
 
 ic_brown = wordnet_ic.ic('ic-brown.dat')
 
@@ -295,6 +295,8 @@ def main():
 
     print("Accuracy_Score: ")
     print(accuracy_score(final_senses, test_results))
-
+    print("F1 Score: ")
+    print(f1_score(final_senses, test_results))
+    
 if __name__ == "__main__":
     main()
