@@ -53,6 +53,24 @@ def lesk_distance(concept_i, concept_j):
     distance += get_overlaping(concept_j, concept_i.definition())
     return distance
     
+def lesk_distance2(concept_i, concept_j):
+    distance = 0
+    #print(concept_i , concept_j)
+    if wordnet.synsets(concept_i) == None or wordnet.synsets(concept_j) == None:
+        return distance
+
+    for syn1 in wordnet.synsets(concept_i):
+        for syn2 in wordnet.synsets(concept_j):
+            distance += get_overlaping(syn1, syn2.definition())
+            distance += get_overlaping(syn2, syn1.definition())
+    return distance
+
+def lesk_distance_full(odour_node,odour_ant):
+    sum = 0
+    for word in odour_node:
+        for word2 in odour_ant:
+            sum+= lesk_distance2(word,word2)
+    return sum
 
 
 # concept_1 = wordnet.synset('friday.n.01')
