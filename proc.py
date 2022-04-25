@@ -10,7 +10,10 @@ from firefly_utils import swarm_size, window_size, window_stride, max_iterations
 ic_brown = wordnet_ic.ic('ic-brown.dat')
 
 intensity_db = {}
+lesk_db = {}
+resink_db = {}
 firefly_hashing = lambda syn_vec: " ".join(map(str, map(int, syn_vec)))
+concepts_hasing = lambda *args: " ".join(sorted(map(str, args)))
 # firefly_best.syn_set[0].lemmas()[0].key() - if needed
 
 def pos_map(pos_):
@@ -93,6 +96,15 @@ def extract_fireflies(sent_dict):
         fireflies.append(firefly)
     return fireflies, senses_list
 
+def lesk_distance_wrapper(concept_i, concept_j):
+    concepts_hash = concepts_hasing(concept_i, concept_j)
+    distance = lesk_db.get(concepts_hash)
+    if distance is not None:
+        return distance
+    
+    distance = lesk_distance(concept_i, concept_j)
+    lesk_db[concepts_hash] = distance
+    return distance
 
 def get_information_content(concept_i, concept_j):
     pos_i = concept_i.name().split('.')[1]
@@ -100,7 +112,14 @@ def get_information_content(concept_i, concept_j):
     if pos_i != pos_j:
         return 0
 
+    concepts_hash = concepts_hasing(concept_i, concept_j)
+    resink_similarity = resink_db.get(concepts_hash)
+    
+    if resink_similarity is not None:
+        return resink_similarity
+    
     resink_similarity = concept_i.res_similarity(concept_j, ic=ic_brown)
+    resink_db[concepts_hash] = resink_similarity
     return resink_similarity
 
 def compute_individual_light_intensity(firefly):
@@ -116,9 +135,8 @@ def compute_individual_light_intensity(firefly):
             concept_i = firefly_window[i]
             for j in range(i):
                 concept_j = firefly_window[j]
-                # TODO: memorization here as well
-                light_intensity += lesk_distance(concept_i, concept_j) + \
-                                get_information_content(concept_i, concept_j)
+                light_intensity += lesk_distance_wrapper(concept_i, concept_j) + \
+                                   get_information_content(concept_i, concept_j)
     firefly.beta = light_intensity
     return light_intensity
 
@@ -152,8 +170,9 @@ def update_firefly_if_needed(fireflies, senses_list):
 
 def apply_fa(entry):
     fireflies, senses_list = extract_fireflies(entry)
-    global intensity_db
+    global intensity_db, lesk_db
     intensity_db = {}
+    lesk_db = {}
 
     light_intensities = compute_light_intensity(fireflies)
     for _ in trange(max_iterations):
@@ -214,7 +233,7 @@ def apply_local_search(firefly_best, senses_list):
     
     neighbour_best_id = np.argmax(light_intensities)
     neighbour_best = neighbour_list[neighbour_best_id]
-    if firefly_best.beta >  light_intensities[neighbour_best_id]:
+    if firefly_best.beta > light_intensities[neighbour_best_id]:
         return neighbour_best
     return firefly_best
 
@@ -224,6 +243,7 @@ dataset = extract_sentences_from_xml(xml_path)
 for entry in dataset:
     firefly_best, senses_list = apply_fa(entry)
     pdb.set_trace()
+    # TODO: implement a saving method called after some epochs/iterations
 
 #   72/30000 [1:42:52]
 #  609/30000 [1:33:52]
