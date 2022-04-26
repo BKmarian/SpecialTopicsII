@@ -244,12 +244,6 @@ def main():
     xml_path = os.path.join('archive','semcor', 'semcor', 'brown1', 'tagfiles', 'br-a01.xml')
     dataset = extract_sentences_from_xml(xml_path)
     test_results = list()
-    for entry in dataset:
-        for word in entry:
-            if str(word["wnsn"]) == "0":
-                test_results.append("0")
-            else:
-                test_results.append(word["lemma"] + "." + word["pos_nltk"][0] + ".0" + str(word["wnsn"]))
 
     global nodes_list
     global edges_list
@@ -263,8 +257,12 @@ def main():
         edges_list.append(Edge(root,sentence,EdgeType.edge))
         root.insert(sentence)
         for word in entry:
-            if word["lemma"] in STOPWORDS:
-                continue
+            # if word["lemma"] in STOPWORDS:
+            #     continue
+            if str(word["wnsn"]) == "0":
+                test_results.append("0")
+            else:
+                test_results.append(word["lemma"] + "." + word["pos_nltk"][0] + ".0" + str(word["wnsn"]))
             word = word["lemma"]
             #if(len(wordnet.synsets(word)) != 0): #TODO
             word_node = Node(None,sentence,NodeType.word)
@@ -297,6 +295,6 @@ def main():
     print(accuracy_score(final_senses, test_results))
     print("F1 Score: ")
     print(f1_score(final_senses, test_results))
-    
+
 if __name__ == "__main__":
     main()
