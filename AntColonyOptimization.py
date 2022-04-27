@@ -10,7 +10,7 @@ import numpy
 from nltk.corpus import wordnet, wordnet_ic
 from tqdm import trange
 from sklearn.metrics import accuracy_score,f1_score
-
+import datetime
 ic_brown = wordnet_ic.ic('ic-brown.dat')
 
 EVAPORATE_RATE = 0.9
@@ -22,7 +22,6 @@ deltav = 0.9
 max_iterations = 500 #CYCLES
 pheromone_deposit = 10
 odour_length = 100
-#nodes_neighbours = dict() #Node,set([Node])
 nodes_list = list()
 edges_list = list()
 STOPWORDS = set(stopwords.words('english'))
@@ -49,6 +48,12 @@ class Node:
             self.odour = list() #[None] * 100
         self.parent = parent 
         self.children = []
+        self.neighbours = list()
+        if self.parent != None:
+            parent.children.append(self)
+
+    def add_neighbour(self,edge,node):
+        self.neighbours.append((edge,node))
 
     def printT(self,depth):
         for i in range(0,depth):
@@ -59,10 +64,6 @@ class Node:
 
     def reduce_energy(self):
         self.energy = self.energy - 1
-
-    def insert(self, node):
-        self.children.append(node)
-        node.setParent(self)
 
     def setParent(self,node):
        self.parent = node
@@ -97,6 +98,8 @@ class Edge:
         self.dest = dest
         self.pheromone = 0.0
         self.edgeType = edgeType
+        source.add_neighbour(self,dest)
+        dest.add_neighbour(self,source)
 
     def eval_f(self):
         return 1 - self.pheromone #create bridge when 0
@@ -115,7 +118,7 @@ def full_probability(probabilities):
             return ip
     return 0 #TODO
 
-def get_neighbours(node: Node,edges_list):
+def get_neighbours(node: Node):
     #return nodes_neighbours.get(node)
     #newNeighbours = set()
     # if(node.type == NodeType.sense):
@@ -123,8 +126,8 @@ def get_neighbours(node: Node,edges_list):
     #         if nest.parent != node.parent:
     #             newEdge = Edge(node,nest,EdgeType.bridge)
     #             newNeighbours.append(newEdge,nest)
-
-    return [(edge,edge.dest) for edge in edges_list if edge.source == node] + [(edge,edge.source) for edge in edges_list if edge.dest == node]
+    return node.neighbours
+    #return [(edge,edge.dest) for edge in edges_list if edge.source == node] + [(edge,edge.source) for edge in edges_list if edge.dest == node]
 
 def iterate():
     ants_list = list()
@@ -143,13 +146,14 @@ def iterate():
                 node.reduce_energy()
                 ants_list.append(ant)
         
-        probabilities = list()
+        #probabilities = list()
         for ant in ants_list:
+            probabilities = list()
             if ant.direction == 1:
                 if(ant.should_return()):
                     ant.change_direction()
             eval_sum = 0
-            neighboursRoutes = get_neighbours(ant.currentNode,edges_list) 
+            neighboursRoutes = get_neighbours(ant.currentNode) 
             if ant.direction == 1:
                 energy_sum = sum([node.energy for _ , node in neighboursRoutes])
                 for (edge,node) in neighboursRoutes:
@@ -158,7 +162,7 @@ def iterate():
                     probabilities.append(nodeEval + edgeEval)
                     eval_sum += nodeEval + edgeEval
 
-                probabilities_new = [ float(prob/eval_sum) for prob in probabilities]
+                probabilities_new = [0 if eval_sum == 0 else float(prob/eval_sum) for prob in probabilities]
                 index = full_probability(probabilities_new)
                 (ant.edgeChosen, ant.nodeChosen) = neighboursRoutes[index]
             else:
@@ -241,6 +245,7 @@ def extract_sentences_from_xml(xml_path):
     return dataset
 
 def main():
+    start_time = datetime.datetime.now()
     xml_path = os.path.join('archive','semcor', 'semcor', 'brown1', 'tagfiles', 'br-a01.xml')
     dataset = extract_sentences_from_xml(xml_path)
     test_results = list()
@@ -255,7 +260,6 @@ def main():
         sentence = Node(None,root,NodeType.sentence)
         nodes_list.append(sentence)
         edges_list.append(Edge(root,sentence,EdgeType.edge))
-        root.insert(sentence)
         for word in entry:
             # if word["lemma"] in STOPWORDS:
             #     continue
@@ -267,13 +271,11 @@ def main():
             #if(len(wordnet.synsets(word)) != 0): #TODO
             word_node = Node(None,sentence,NodeType.word)
             edges_list.append(Edge(sentence,word_node,EdgeType.edge))
-            sentence.insert(word_node)
             nodes_list.append(word_node)
             for sense in wordnet.synsets(word):
                 sense_node = Node(sense,word_node,NodeType.sense)
                 edges_list.append(Edge(word_node,sense_node,EdgeType.edge))
                 nodes_list.append(sense_node)
-                word_node.insert(sense_node)
     #root.printT(0)
 
     #Scenario    
@@ -286,15 +288,21 @@ def main():
         if word in STOPWORDS:
             final_senses.append("0")
         else:
-            nest = max([nest for nest in word.children],key=lambda nest:nest.energy)
-            final_senses.append(nest.sense.name())
+            if len(word.children) == 0:
+                final_senses.append("0")
+            else:
+                nest = max([nest for nest in word.children],key=lambda nest:nest.energy)
+                final_senses.append(nest.sense.name())
+    print("Final senses:")
     print(final_senses)
+    print("Test results:")
     print(test_results)
 
     print("Accuracy_Score: ")
     print(accuracy_score(final_senses, test_results))
     print("F1 Score: ")
-    print(f1_score(final_senses, test_results))
+    print(f1_score(final_senses, test_results), average='weighted')
 
+    print("--- %s Time ---" % (datetime.datetime.now() - start_time))
 if __name__ == "__main__":
     main()

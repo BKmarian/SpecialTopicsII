@@ -2,6 +2,7 @@ from nltk.corpus import wordnet
 from nltk import word_tokenize
 from nltk.corpus import stopwords
 import nltk
+from functools import lru_cache
 # nltk.download('stopwords')
 # nltk.download('wordnet')
 # nltk.download('omw-1.4')
@@ -39,7 +40,7 @@ def overlapcontext(synset, sentence):
 #             bestsense = sense
 #     return (maxoverlap,bestsense)
 
-
+@lru_cache(maxsize=None)
 def get_overlaping(concept, sentence):
     overlap = overlapcontext(concept, sentence)
     extended_gloss = concept.hyponyms() + concept.hypernyms()
@@ -52,7 +53,8 @@ def lesk_distance(concept_i, concept_j):
     distance += get_overlaping(concept_i, concept_j.definition())
     distance += get_overlaping(concept_j, concept_i.definition())
     return distance
-    
+
+@lru_cache(maxsize=None)    
 def lesk_distance2(concept_i, concept_j):
     distance = 0
     #print(concept_i , concept_j)
