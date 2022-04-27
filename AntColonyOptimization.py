@@ -263,7 +263,7 @@ def main():
         for word in entry:
             # if word["lemma"] in STOPWORDS:
             #     continue
-            if str(word["wnsn"]) == "0":
+            if str(word["wnsn"]) == "0" or str(word["lemma"]) == "":
                 test_results.append("0")
             else:
                 test_results.append(word["lemma"] + "." + word["pos_nltk"][0] + ".0" + str(word["wnsn"]))
@@ -294,14 +294,19 @@ def main():
                 nest = max([nest for nest in word.children],key=lambda nest:nest.energy)
                 final_senses.append(nest.sense.name())
     print("Final senses:")
-    print(final_senses)
+    with open('final_senses.txt', 'w') as f:
+        for item in final_senses:
+            f.write("%s\n" % item)
+    
     print("Test results:")
-    print(test_results)
+    with open('test_results.txt', 'w') as f:
+        for item in test_results:
+            f.write("%s\n" % item)
 
     print("Accuracy_Score: ")
     print(accuracy_score(final_senses, test_results))
     print("F1 Score: ")
-    print(f1_score(final_senses, test_results), average='weighted')
+    print(f1_score(final_senses, test_results, average='weighted'))
 
     print("--- %s Time ---" % (datetime.datetime.now() - start_time))
 if __name__ == "__main__":

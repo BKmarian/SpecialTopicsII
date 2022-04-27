@@ -43,7 +43,23 @@ def overlapcontext(synset, sentence):
 @lru_cache(maxsize=None)
 def get_overlaping(concept, sentence):
     overlap = overlapcontext(concept, sentence)
-    extended_gloss = concept.hyponyms() + concept.hypernyms()
+    extended_gloss = concept.hyponyms() + \
+                     concept.hypernyms() + \
+                     concept.substance_meronyms() + \
+                     concept.part_meronyms() + \
+                     concept.member_meronyms() + \
+                     concept.part_holonyms() + \
+                     concept.member_holonyms() + \
+                     concept.topic_domains() + \
+                     concept.region_domains() + \
+                     concept.usage_domains() + \
+                     concept.entailments() + \
+                     concept.causes() + \
+                     concept.also_sees() + \
+                     concept.verb_groups() + \
+                     concept.attributes() + \
+                     concept.similar_tos()
+
     for hyp in extended_gloss:
         overlap += overlapcontext(hyp, sentence)
     return overlap
@@ -92,3 +108,5 @@ def lesk_distance_full(odour_node,odour_ant):
 #     for i in a.examples():
 #         num = num + 1
 #         print(str(num) + '.' + ')', i)
+
+#synset1.path_similarity(synset2)
