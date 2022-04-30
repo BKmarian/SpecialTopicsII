@@ -2,11 +2,26 @@ import os
 import pdb
 import xml.etree.ElementTree as etree
 import numpy as np
+import json
 
 from nltk.corpus import wordnet, wordnet_ic
 from tqdm import trange
 from improved_lesk import lesk_distance
-from firefly_utils import swarm_size, window_size, window_stride, max_iterations, alpha, gamma, local_rate, lfa
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
+from functools import lru_cache
+
+swarm_size = 40
+alpha = 0.2
+gamma = 1
+window_size = 5
+window_stride = 1
+local_rate = 0.15
+lfa = 17000
+
+max_iterations = 30000
+eps_convergence = 1e-3
+patience = 25
+
 ic_brown = wordnet_ic.ic('ic-brown.dat')
 
 intensity_db = {}
@@ -40,14 +55,15 @@ def extract_sentences_from_xml(xml_path):
         sentence = []
         for wf_elem in sentence_elem.findall('wf'):
             wf_atributes = wf_elem.attrib
-            if wf_atributes['cmd'] != 'ignore' and wf_atributes["pos"] != "NNP":
+            wf_lemma = wf_atributes.get("lemma", "")
+            if wf_atributes['cmd'] != 'ignore' and wf_atributes["pos"] != "NNP" and wf_lemma != "":
                 pos_ = wf_atributes["pos"]
                 pos_nltk = pos_map(pos_)
                 
                 sentence.append({
                     "pos": pos_,
                     "pos_nltk": pos_nltk,
-                    "lemma": wf_atributes.get("lemma", ""),
+                    "lemma": wf_lemma,
                     "wnsn": wf_atributes.get("wnsn", "")
                 })
         dataset.append(sentence)
@@ -59,6 +75,19 @@ class Firefly:
         self.syn_set = syn_set
         self.syn_vec = syn_vec
         self.beta = 0
+    
+    def to_json(self):
+        return {
+            "position": self.syn_vec.tolist(),
+            "synsets": [syn.name() for syn in self.syn_set],
+            "intensity": float(self.beta)
+        }
+        
+    def __repr__(self):
+        vec_str = ' '.join(map(str, self.syn_vec))
+        syn_str = ' '.join([syn.name() for syn in self.syn_set])
+        return f'{vec_str}\n{syn_str}\nIntensity: {self.beta}'
+
 
     @classmethod
     def from_indices(self, firefly_indices, synsets_list):
@@ -82,13 +111,33 @@ class Firefly:
         
         firefly = Firefly.from_indices(firefly_indices, synsets_list)
         return firefly
+    
+    @classmethod
+    def from_semcor(self, sent_dict, synsets_list):
+        firefly_indices = []
+        firefly_synsets = []
+        for word_dict, syn_list in zip(sent_dict, synsets_list):
+            synset_str = '.'.join([word_dict['lemma'], word_dict['pos_nltk'], word_dict['wnsn']])
+            synset = wordnet.synset(synset_str)
+            
+            if synset not in syn_list:
+                # THIS SHOULD NOT HAPPEN
+                pdb.set_trace()
+
+            syn_id = syn_list.index(synset)
+            firefly_indices.append(syn_id)
+            firefly_synsets.append(synset)
+        
+        firefly = Firefly(firefly_synsets, np.array(firefly_indices, dtype=np.float32))
+        return firefly
 
 
 def extract_fireflies(sent_dict):
     senses_list = []
     for word_dict in sent_dict:
         word_senses = wordnet.synsets(word_dict["lemma"], pos=word_dict['pos_nltk'])
-        senses_list.append(word_senses)
+        if len(word_senses) > 0:
+            senses_list.append(word_senses)
 
     fireflies = []
     for _ in range(swarm_size):
@@ -96,30 +145,17 @@ def extract_fireflies(sent_dict):
         fireflies.append(firefly)
     return fireflies, senses_list
 
-def lesk_distance_wrapper(concept_i, concept_j):
-    concepts_hash = concepts_hasing(concept_i, concept_j)
-    distance = lesk_db.get(concepts_hash)
-    if distance is not None:
-        return distance
-    
-    distance = lesk_distance(concept_i, concept_j)
-    lesk_db[concepts_hash] = distance
-    return distance
-
+@lru_cache(maxsize=None)  
 def get_information_content(concept_i, concept_j):
     pos_i = concept_i.name().split('.')[1]
     pos_j = concept_j.name().split('.')[1]
     if pos_i != pos_j:
         return 0
-
-    concepts_hash = concepts_hasing(concept_i, concept_j)
-    resink_similarity = resink_db.get(concepts_hash)
     
-    if resink_similarity is not None:
-        return resink_similarity
-    
-    resink_similarity = concept_i.res_similarity(concept_j, ic=ic_brown)
-    resink_db[concepts_hash] = resink_similarity
+    try:
+        resink_similarity = concept_i.res_similarity(concept_j, ic=ic_brown)
+    except:
+        resink_similarity = 0
     return resink_similarity
 
 def compute_individual_light_intensity(firefly):
@@ -135,8 +171,10 @@ def compute_individual_light_intensity(firefly):
             concept_i = firefly_window[i]
             for j in range(i):
                 concept_j = firefly_window[j]
-                light_intensity += lesk_distance_wrapper(concept_i, concept_j) + \
-                                   get_information_content(concept_i, concept_j)
+
+                light_intensity += lesk_distance(concept_i, concept_j) + \
+                                    get_information_content(concept_i, concept_j)
+
     firefly.beta = light_intensity
     return light_intensity
 
@@ -173,6 +211,8 @@ def apply_fa(entry):
     global intensity_db, lesk_db
     intensity_db = {}
     lesk_db = {}
+    prev_intensity = -1
+    patience_idx = 0
 
     light_intensities = compute_light_intensity(fireflies)
     for _ in trange(max_iterations):
@@ -184,12 +224,13 @@ def apply_fa(entry):
                 firefly_j = fireflies[j]
                 x_j = firefly_j.syn_vec
 
-                r_i_j = get_euclidean_distance(x_i, x_j)
-                beta = firefly_i.beta * np.exp(- gamma * r_i_j ** 2)
+                if firefly_j.beta > firefly_i.beta:
+                    r_i_j = get_euclidean_distance(x_i, x_j)
+                    beta = firefly_i.beta * np.exp(- gamma * r_i_j ** 2)
 
-                rand_ = np.random.uniform(0, 1)
-                x_i += beta * r_i_j * (x_i - x_j) * alpha * (rand_ - 0.5)
-                firefly_i.syn_vec = x_i
+                    rand_ = np.random.uniform(0, 1)
+                    x_i += beta * r_i_j * (x_i - x_j) * alpha * (rand_ - 0.5)
+                    firefly_i.syn_vec = x_i
 
         update_firefly_if_needed(fireflies, senses_list)
         light_intensities = compute_light_intensity(fireflies)
@@ -199,6 +240,19 @@ def apply_fa(entry):
         firefly_best = apply_local_search(firefly_best, senses_list)
         if firefly_best not in fireflies:
             fireflies.append(firefly_best)
+        
+        best_intensity = firefly_best.beta
+        
+        if best_intensity - prev_intensity < eps_convergence:
+            if patience_idx < patience:
+                patience_idx += 1
+            else:
+                break
+        else:
+            patience_idx = 0
+
+        prev_intensity = best_intensity
+        
 
     return firefly_best, senses_list
 
@@ -240,10 +294,30 @@ def apply_local_search(firefly_best, senses_list):
 xml_path = os.path.join('semcor', 'semcor', 'brown1', 'tagfiles', 'br-a01.xml')
 dataset = extract_sentences_from_xml(xml_path)
 
+results = []
 for entry in dataset:
     firefly_best, senses_list = apply_fa(entry)
-    pdb.set_trace()
-    # TODO: implement a saving method called after some epochs/iterations
+    firefly_gt = Firefly.from_semcor(entry, senses_list)
+    compute_individual_light_intensity(firefly_gt)
 
-#   72/30000 [1:42:52]
-#  609/30000 [1:33:52]
+    gt_vec = firefly_gt.syn_vec.astype(int)
+    best_vec = firefly_best.syn_vec.astype(int)
+    
+    results.append({
+        # "sent_dict": entry,
+        "firefly_gt": firefly_gt.to_json(),
+        "firefly_found": firefly_best.to_json(),
+        "accuracy": accuracy_score(gt_vec, best_vec),
+        "f1_macro": f1_score(gt_vec, best_vec, average="macro"),
+        "precision": precision_score(gt_vec, best_vec, average="macro", zero_division=True),
+        "recall": recall_score(gt_vec, best_vec, average="macro", zero_division=True)
+    })
+    break
+
+firefly_results_path = os.path.join("logs", "results_firefly.json")
+with open(firefly_results_path, "w") as fout:
+    json.dump(results, fout, indent=4)
+
+#    72/30000 [1:42:52]
+#   609/30000 [1:33:52]
+# 13117/30000 [3:31:38]
