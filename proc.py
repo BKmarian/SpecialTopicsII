@@ -6,7 +6,7 @@ import json
 
 from nltk.corpus import wordnet, wordnet_ic
 from tqdm import trange
-from improved_lesk import lesk_distance
+from improved_lesk import lesk_distance, pos_map
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 from functools import lru_cache
 
@@ -30,12 +30,6 @@ resink_db = {}
 firefly_hashing = lambda syn_vec: " ".join(map(str, map(int, syn_vec)))
 concepts_hasing = lambda *args: " ".join(sorted(map(str, args)))
 # firefly_best.syn_set[0].lemmas()[0].key() - if needed
-
-def pos_map(pos_):
-    first_letter = pos_[0].lower()
-    if first_letter == 'j':
-        return 'a'
-    return first_letter
 
 def extract_sentences_from_xml(xml_path):
     with open(xml_path, 'r') as fin:
@@ -312,7 +306,6 @@ for entry in dataset:
         "precision": precision_score(gt_vec, best_vec, average="macro", zero_division=True),
         "recall": recall_score(gt_vec, best_vec, average="macro", zero_division=True)
     })
-    break
 
 firefly_results_path = os.path.join("logs", "results_firefly.json")
 with open(firefly_results_path, "w") as fout:

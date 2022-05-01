@@ -1,27 +1,60 @@
 from nltk.corpus import wordnet
 from nltk import word_tokenize
 from nltk.corpus import stopwords
-import nltk
 from functools import lru_cache
+
+import numpy as np
+import string
+import nltk
 # nltk.download('stopwords')
 # nltk.download('wordnet')
 # nltk.download('omw-1.4')
 # nltk.download('punkt')
 # nltk.download('wordnet_ic')
 STOPWORDS = set(stopwords.words('english'))
+FORBIDEN = STOPWORDS.union(set(string.punctuation))
+wordnet_poss = [wordnet.NOUN, wordnet.ADJ, wordnet.ADV, wordnet.VERB]
 
-def overlapcontext(synset, sentence):
+import pdb
+
+def pos_map(pos_):
+    first_letter = pos_[0].lower()
+    if first_letter == 'j':
+        return 'a'
+    return first_letter
+
+def tokenize_and_clean(sentence):
+    sentence_ = [word for word in word_tokenize(sentence) if word not in FORBIDEN]
+    return sentence_
+
+def tokenize_and_pos(sentence):
+    token_pos_pair = nltk.pos_tag(word_tokenize(sentence))
+    token_pos_map = {token: pos_map(pos) for token, pos in token_pos_pair}
+    return token_pos_map
+
+def overlapcontext(synset, sentence, max_ngrams):
     # TODO: also add 2-3 gram overlap only on firefly algorithm
     # firefly    - suma polinomiala (p cuvinte care apar impreuna + (overlap-urile) ** p, p >=2 )
     # ant colony - suma liniara
-    gloss = set(word_tokenize(synset.definition()))
-    for example in synset.examples():
-        gloss.union(word_tokenize(example))
-    gloss = gloss.difference(STOPWORDS)
     
-    sentence = set(word_tokenize(sentence))
-    sentence = sentence.difference(STOPWORDS)
-    return len(gloss.intersection(sentence))
+    gloss_ngrams = []
+    gloss = [synset.definition()] + synset.examples()
+    for example in gloss:
+        example_set = tokenize_and_clean(example)
+        gloss_ngrams += nltk.everygrams(example_set, 1, max_ngrams)
+
+    sentence = tokenize_and_clean(sentence)
+    sentece_ngrams = nltk.everygrams(sentence, 1, max_ngrams)
+
+    ngrams_intersection = set(gloss_ngrams).intersection(sentece_ngrams)
+    values, counts = np.unique(
+        list(map(lambda ngram: len(ngram), ngrams_intersection))
+    , return_counts=True)
+    
+    score = 0
+    for value, count in zip(values, counts):
+        score += count ** value
+    return score
 
 # def get_wordnet_form(word):
 #     return wordnet.morphy(word) if wordnet.morphy(word) is not None else word
@@ -41,8 +74,8 @@ def overlapcontext(synset, sentence):
 #     return (maxoverlap,bestsense)
 
 @lru_cache(maxsize=None)
-def get_overlaping(concept, sentence):
-    overlap = overlapcontext(concept, sentence)
+def get_overlaping(concept, sentence, max_ngrams=1):
+    overlap = overlapcontext(concept, sentence, max_ngrams)
     extended_gloss = concept.hyponyms() + \
                      concept.hypernyms() + \
                      concept.substance_meronyms() + \
@@ -61,13 +94,29 @@ def get_overlaping(concept, sentence):
                      concept.similar_tos()
 
     for hyp in extended_gloss:
-        overlap += overlapcontext(hyp, sentence)
+        overlap += overlapcontext(hyp, sentence, max_ngrams)
     return overlap
 
+def lesk_unidirect_distance(concept_i, concept_j):
+    sentence = concept_i.definition()
+    tokens_ = tokenize_and_clean(sentence)
+    token_pos_map = tokenize_and_pos(sentence)
+    
+    distance = 0
+    for token_ in tokens_:
+        pos = token_pos_map[token_]
+        if pos in wordnet_poss:
+            synsets = wordnet.synsets(token_, pos=token_pos_map[token_])
+            for synset in synsets:
+                distance += get_overlaping(synset, concept_j.definition(), max_ngrams=5)
+    return distance
+
+@lru_cache(maxsize=None)
 def lesk_distance(concept_i, concept_j):
     distance = 0
-    distance += get_overlaping(concept_i, concept_j.definition())
-    distance += get_overlaping(concept_j, concept_i.definition())
+
+    distance += lesk_unidirect_distance(concept_i, concept_j)
+    distance += lesk_unidirect_distance(concept_j, concept_i)
     return distance
 
 @lru_cache(maxsize=None)    
