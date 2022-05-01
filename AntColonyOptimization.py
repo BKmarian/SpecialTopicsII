@@ -11,6 +11,8 @@ from nltk.corpus import wordnet, wordnet_ic
 from tqdm import trange
 from sklearn.metrics import accuracy_score,f1_score
 import datetime
+import os
+
 ic_brown = wordnet_ic.ic('ic-brown.dat')
 
 EVAPORATE_RATE = 0.9
@@ -110,13 +112,14 @@ class Edge:
     
 def full_probability(probabilities):
     #print(probabilities)
-    r = random.random()
-    sum = 0 
-    for ip,prob in enumerate(probabilities):
-        sum += prob
-        if(r < prob):
-            return ip
-    return 0 #TODO
+    # r = random.random()
+    # sum = 0 
+    # for ip,prob in enumerate(probabilities):
+    #     sum += prob
+    #     if(r < prob):
+    #         return ip
+    # return ip #TODO 0?
+    return numpy.random.choice(len(probabilities), 1, p=probabilities)[0]
 
 def get_neighbours(node: Node):
     #return nodes_neighbours.get(node)
@@ -134,7 +137,7 @@ def iterate():
     global edges_list
     #bridges_list = list()
     for i in range(0,max_iterations):
-        print("Iteration ",i)
+        #print("Iteration ",i)
         for ant in [ant for ant in ants_list if ant.is_dead == True]:
             ant.currentNode.energy = ant.currentNode.energy + ant.energy
         ants_list = [ant for ant in ants_list if ant.is_dead == False]
@@ -162,9 +165,12 @@ def iterate():
                     probabilities.append(nodeEval + edgeEval)
                     eval_sum += nodeEval + edgeEval
 
-                probabilities_new = [0 if eval_sum == 0 else float(prob/eval_sum) for prob in probabilities]
-                index = full_probability(probabilities_new)
-                (ant.edgeChosen, ant.nodeChosen) = neighboursRoutes[index]
+                if eval_sum == 0:
+                    (ant.edgeChosen, ant.nodeChosen) = random.choice(neighboursRoutes)
+                else:
+                    probabilities_new = [float(prob/eval_sum) for prob in probabilities]
+                    index = full_probability(probabilities_new)
+                    (ant.edgeChosen, ant.nodeChosen) = neighboursRoutes[index]
             else:
                 suma = sum([lesk_distance_full(node.odour, ant.odour) for _ , node in neighboursRoutes])
                 for (edge,node) in neighboursRoutes:
@@ -176,9 +182,12 @@ def iterate():
                     probabilities.append(nodeEval + edgeEval)
                     eval_sum += nodeEval + edgeEval
 
-                probabilities_new = [ 0 if eval_sum == 0 else float(prob/eval_sum) for prob in probabilities]
-                index = full_probability(probabilities_new)
-                (ant.edgeChosen, ant.nodeChosen) = neighboursRoutes[index]
+                if eval_sum == 0:
+                    (ant.edgeChosen, ant.nodeChosen) = random.choice(neighboursRoutes)
+                else:
+                    probabilities_new = [ 0 if eval_sum == 0 else float(prob/eval_sum) for prob in probabilities]
+                    index = full_probability(probabilities_new)
+                    (ant.edgeChosen, ant.nodeChosen) = neighboursRoutes[index]
 
             ant.currentNode = ant.nodeChosen
             ant.lifespan = ant.lifespan - 1
@@ -225,8 +234,8 @@ def extract_sentences_from_xml(xml_path):
         sentence_elem = elem.find('s')
         
         # for testing purposes
-        if i > 10: 
-            break
+        #if i > 10: #TODO
+        #    break
 
         sentence = []
         for wf_elem in sentence_elem.findall('wf'):
@@ -244,10 +253,19 @@ def extract_sentences_from_xml(xml_path):
         dataset.append(sentence)
     return dataset
 
-def main():
+def print_output(final_senses,test_results):
+    print("Final senses:")
+    with open('final_senses.txt', 'w') as f:
+        for item in final_senses:
+            f.write("%s\n" % item)
+    
+    print("Test results:")
+    with open('test_results.txt', 'w') as f:
+        for item in test_results:
+            f.write("%s\n" % item)
+
+def run(dataset):
     start_time = datetime.datetime.now()
-    xml_path = os.path.join('archive','semcor', 'semcor', 'brown1', 'tagfiles', 'br-a01.xml')
-    dataset = extract_sentences_from_xml(xml_path)
     test_results = list()
 
     global nodes_list
@@ -292,22 +310,51 @@ def main():
                 final_senses.append("0")
             else:
                 nest = max([nest for nest in word.children],key=lambda nest:nest.energy)
-                final_senses.append(nest.sense.name())
-    print("Final senses:")
-    with open('final_senses.txt', 'w') as f:
-        for item in final_senses:
-            f.write("%s\n" % item)
+                sense = nest.sense.name()#.split(".")[0] #nest.sense.name()
+                final_senses.append(sense)
     
-    print("Test results:")
-    with open('test_results.txt', 'w') as f:
-        for item in test_results:
-            f.write("%s\n" % item)
+    #print_output(final_senses,test_results)
+    
+    acc = accuracy_score(final_senses, test_results)
+    f1 = f1_score(final_senses, test_results, average='weighted')
+    run_time = datetime.datetime.now() - start_time
 
     print("Accuracy_Score: ")
-    print(accuracy_score(final_senses, test_results))
+    print(acc)
     print("F1 Score: ")
-    print(f1_score(final_senses, test_results, average='weighted'))
+    print(f1)
 
-    print("--- %s Time ---" % (datetime.datetime.now() - start_time))
+    print("--- %s Time ---" % (run_time))
+    return {"Acc": acc , "F1": f1 , "run_time":run_time}
+
+def main():
+    global nodes_list
+    global edges_list
+
+    xml_path = os.path.join('archive','semcor', 'semcor', 'brown1', 'tagfiles')
+    total_acc = 0
+    total_f1 = 0
+    total_runtime = 0
+    files_number = 0
+    for index,filename in enumerate(os.listdir(xml_path)):
+        if(index == 2):
+            break #TODO for test purpose only
+        file_path = os.path.join(xml_path, filename)
+        nodes_list = []
+        edges_list = []
+        if os.path.isfile(file_path):
+            dataset = extract_sentences_from_xml(file_path)
+            results = run(dataset)
+            files_number = files_number + 1
+            total_acc += results["Acc"]
+            total_f1 += results["F1"]
+            print("--- Run Time ---" )
+            print(results["run_time"])
+
+    print("Accuracy_Score: ")
+    print(float(total_acc/files_number))
+    print("F1 Score: ")
+    print(float(total_f1/files_number))
+
 if __name__ == "__main__":
     main()
