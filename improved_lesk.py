@@ -15,11 +15,11 @@ def overlapcontext(synset, sentence):
     # firefly    - suma polinomiala (p cuvinte care apar impreuna + (overlap-urile) ** p, p >=2 )
     # ant colony - suma liniara
     gloss = set(word_tokenize(synset.definition()))
-    for i in synset.examples():
-        gloss.union(i)
+    for example in synset.examples():
+        gloss.union(word_tokenize(example))
     gloss = gloss.difference(STOPWORDS)
     
-    sentence = set(sentence.split(" "))
+    sentence = set(word_tokenize(sentence))
     sentence = sentence.difference(STOPWORDS)
     return len(gloss.intersection(sentence))
 
