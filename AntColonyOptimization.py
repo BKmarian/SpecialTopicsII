@@ -21,7 +21,7 @@ E_0 = 30
 omega = 25 # ant life duration
 Ea = 16 # energy_taken_by_ant_when arriving on node
 deltav = 0.9
-max_iterations = 500 #CYCLES
+max_iterations = 200 #CYCLES
 pheromone_deposit = 10
 odour_length = 100
 nodes_list = list()
@@ -89,7 +89,7 @@ class Ant:
 
     def should_return(self):
         r = random.randint(0,100)
-        return r < (self.energy/E_max * 100)
+        return r < (float(self.energy/E_max) * 100)
 
     def is_dead(self):
         self.lifespan == 0
@@ -107,22 +107,14 @@ class Edge:
         return 1 - self.pheromone #create bridge when 0
 
     def change_pheromone(self):
-        self.pheromone = (1 - EVAPORATE_RATE) * self.pheromone
+        self.pheromone = (float(1 - EVAPORATE_RATE)) * self.pheromone
 
     
 def full_probability(probabilities):
-    #print(probabilities)
-    # r = random.random()
-    # sum = 0 
-    # for ip,prob in enumerate(probabilities):
-    #     sum += prob
-    #     if(r < prob):
-    #         return ip
-    # return ip #TODO 0?
     return numpy.random.choice(len(probabilities), 1, p=probabilities)[0]
 
 def get_neighbours(node: Node):
-    #return nodes_neighbours.get(node)
+    #return nodes_neighbours.get(node)§
     #newNeighbours = set()
     # if(node.type == NodeType.sense):
     #     for nest in nests_list:
@@ -137,7 +129,7 @@ def iterate():
     global edges_list
     #bridges_list = list()
     for i in range(0,max_iterations):
-        #print("Iteration ",i)
+        print("Iteration ",i)
         for ant in [ant for ant in ants_list if ant.is_dead == True]:
             ant.currentNode.energy = ant.currentNode.energy + ant.energy
         ants_list = [ant for ant in ants_list if ant.is_dead == False]
@@ -152,16 +144,15 @@ def iterate():
         #probabilities = list()
         for ant in ants_list:
             probabilities = list()
-            if ant.direction == 1:
-                if(ant.should_return()):
-                    ant.change_direction()
+            if ant.direction == 1 and ant.should_return():
+                ant.change_direction()
             eval_sum = 0
             neighboursRoutes = get_neighbours(ant.currentNode) 
             if ant.direction == 1:
                 energy_sum = sum([node.energy for _ , node in neighboursRoutes])
                 for (edge,node) in neighboursRoutes:
-                    nodeEval = node.energy / energy_sum
-                    edgeEval = 1 - edge.pheromone
+                    nodeEval = float(node.energy / energy_sum)
+                    edgeEval = float(1 - edge.pheromone)
                     probabilities.append(nodeEval + edgeEval)
                     eval_sum += nodeEval + edgeEval
 
@@ -178,7 +169,7 @@ def iterate():
                     if suma == 0:
                         nodeEval = 0
                     else:
-                        nodeEval = lesk_distance_full(node.odour , ant.odour) / suma
+                        nodeEval = float(lesk_distance_full(node.odour , ant.odour) / suma)
                     probabilities.append(nodeEval + edgeEval)
                     eval_sum += nodeEval + edgeEval
 
@@ -198,10 +189,10 @@ def iterate():
                 depositedOdour = depositedOdour[:pos]
                 for elem in depositedOdour:
                     if len(ant.currentNode.odour) < odour_length:
-                        #if random.random() < 0.5:
-                        ant.currentNode.odour.append(elem)
-                        #else:
-                          #  ant.currentNode.odour[random.randrange(len(ant.currentNode.odour) + 1)] = elem
+                        if random.random() < 0.5 or len(ant.currentNode.odour) == 0: #TODO
+                            ant.currentNode.odour.append(elem)
+                        else:
+                            ant.currentNode.odour[random.randrange(0,len(ant.currentNode.odour))] = elem
                     else:
                         ant.currentNode.odour[random.randrange(0,100)] = elem
 
@@ -337,7 +328,7 @@ def main():
     total_runtime = 0
     files_number = 0
     for index,filename in enumerate(os.listdir(xml_path)):
-        if(index == 2):
+        if(index == 20):
             break #TODO for test purpose only
         file_path = os.path.join(xml_path, filename)
         nodes_list = []

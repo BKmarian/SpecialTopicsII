@@ -68,7 +68,16 @@ def get_overlap_score(subconcept_i, subconcept_j, max_ngrams=1):
     return score
 
 @lru_cache(maxsize=None)
-def lesk_distance(concept_i, concept_j, max_ngrams=5):
+def lesk_distance_ant(concept_i, concept_j):
+    distance = 0
+
+    concept_i_ext = get_extended_concepts(concept_i)
+    concept_j_ext = get_extended_concepts(concept_j)
+
+    return sum([concept_j_ext.count(element) for element in concept_i_ext])
+
+@lru_cache(maxsize=None)
+def lesk_distance(concept_i, concept_j, max_ngrams):
     distance = 0
 
     concept_i_ext = get_extended_concepts(concept_i)
@@ -88,7 +97,7 @@ def lesk_distance2(concept_i, concept_j):
 
     for syn1 in wordnet.synsets(concept_i):
         for syn2 in wordnet.synsets(concept_j):
-            distance += lesk_distance(syn1, syn2, max_ngrams=1)
+            distance += lesk_distance_ant(syn1, syn2)
     return distance
 
 def lesk_distance_full(odour_node, odour_ant):
