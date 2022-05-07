@@ -3,17 +3,22 @@ import pdb
 import xml.etree.ElementTree as etree
 import numpy as np
 import json
+import nltk
+import re
 
+from nltk import word_tokenize
 from nltk.corpus import wordnet, wordnet_ic
 from tqdm import trange
-from improved_lesk import lesk_distance, pos_map
+from improved_lesk import lesk_distance, pos_map, STOPWORDS
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 from functools import lru_cache
+from glob import glob
+lemmatizer = nltk.stem.WordNetLemmatizer()
 
 swarm_size = 40
 alpha = 0.2
 gamma = 1
-window_size = 5
+window_size = 11
 window_stride = 1
 local_rate = 0.15
 lfa = 17000
@@ -41,10 +46,6 @@ def extract_sentences_from_xml(xml_path):
     context = tree.find('context')
     for i, elem in enumerate(context.findall('p')):
         sentence_elem = elem.find('s')
-        
-        # for testing purposes
-        if i > 10: 
-            break
 
         sentence = []
         for wf_elem in sentence_elem.findall('wf'):
@@ -161,12 +162,12 @@ def compute_individual_light_intensity(firefly):
     for start in range(0, last_start, window_stride):
         end = start + window_size
         firefly_window = synsets[start: end]
-        for i in range(window_size):
+        for i in range(len(firefly_window)):
             concept_i = firefly_window[i]
             for j in range(i):
                 concept_j = firefly_window[j]
 
-                light_intensity += lesk_distance(concept_i, concept_j) + \
+                light_intensity += lesk_distance(concept_i, concept_j, max_ngrams=5) + \
                                     get_information_content(concept_i, concept_j)
 
     firefly.beta = light_intensity
@@ -201,7 +202,7 @@ def update_firefly_if_needed(fireflies, senses_list):
                            for index, synsets in zip(syn_vec, senses_list)]
 
 def apply_fa(entry):
-    fireflies, senses_list = extract_fireflies(entry)
+    fireflies, senses_list = extract_fireflies(entry)                       
     global intensity_db, lesk_db
     intensity_db = {}
     lesk_db = {}
@@ -285,31 +286,75 @@ def apply_local_search(firefly_best, senses_list):
         return neighbour_best
     return firefly_best
 
-xml_path = os.path.join('semcor', 'semcor', 'brown1', 'tagfiles', 'br-a01.xml')
-dataset = extract_sentences_from_xml(xml_path)
+def get_sent_dict(text):
+    text = re.sub("[^a-zA-Z]", " ", text)
+    text = re.sub("\s+", " ", text)
+    sent_pair = nltk.pos_tag(word_tokenize(text))
+    sent_dict = [
+        {
+            "lemma": lemmatizer.lemmatize(token, pos=pos_map(pos)),
+            "pos_nltk": pos_map(pos)
+        } 
+        for token, pos in sent_pair if token not in STOPWORDS
+    ]
+    return sent_dict
 
-results = []
-for entry in dataset:
-    firefly_best, senses_list = apply_fa(entry)
-    firefly_gt = Firefly.from_semcor(entry, senses_list)
-    compute_individual_light_intensity(firefly_gt)
 
-    gt_vec = firefly_gt.syn_vec.astype(int)
-    best_vec = firefly_best.syn_vec.astype(int)
-    
-    results.append({
-        # "sent_dict": entry,
-        "firefly_gt": firefly_gt.to_json(),
-        "firefly_found": firefly_best.to_json(),
-        "accuracy": accuracy_score(gt_vec, best_vec),
-        "f1_macro": f1_score(gt_vec, best_vec, average="macro"),
-        "precision": precision_score(gt_vec, best_vec, average="macro", zero_division=True),
-        "recall": recall_score(gt_vec, best_vec, average="macro", zero_division=True)
-    })
+def inference(text):
+    sent_dict = get_sent_dict(text)
+    firefly_best, _ = apply_fa(sent_dict)
+    print(firefly_best.to_json())
 
-firefly_results_path = os.path.join("logs", "results_firefly.json")
-with open(firefly_results_path, "w") as fout:
-    json.dump(results, fout, indent=4)
+
+def main():
+    dataset = []
+    xml_re = os.path.join('semcor', 'semcor', 'brown1', 'tagfiles', '*.xml')
+    for xml_path in glob(xml_re):
+        dataset += extract_sentences_from_xml(xml_path)
+
+    results = []
+    accuracy_s = []
+    f1_macro_s = []
+    precisions = []
+    recalls = []
+    for entry in dataset:
+        firefly_best, senses_list = apply_fa(entry)
+        firefly_gt = Firefly.from_semcor(entry, senses_list)
+        compute_individual_light_intensity(firefly_gt)
+
+        gt_list = [syn.name() for syn in firefly_gt.syn_set]
+        best_list = [syn.name() for syn in firefly_best.syn_set]
+        accuracy = accuracy_score(gt_list, best_list)
+        f1_macro = f1_score(gt_list, best_list, average="macro")
+        precision = precision_score(gt_list, best_list, average="macro", zero_division=True)
+        recall = recall_score(gt_list, best_list, average="macro", zero_division=True)
+        
+        results.append({
+            "firefly_gt": firefly_gt.to_json(),
+            "firefly_found": firefly_best.to_json(),
+            "accuracy": accuracy,
+            "f1_macro": f1_macro,
+            "precision": precision,
+            "recall": recall
+        })
+        accuracy_s.append(accuracy)
+        f1_macro_s.append(f1_macro)
+        precisions.append(precision)
+        recalls.append(recall)
+
+    mean_accuracy = np.mean(accuracy_s)
+    mean_f1 = np.mean(f1_macro_s)
+    mean_precision = np.mean(precisions)
+    mean_recall = np.mean(recalls)
+    print(f"Finished with mean accuracy {mean_accuracy}, mean F1 {mean_f1}, mean precision {mean_precision}, mean recall {mean_recall}")
+
+    firefly_results_path = os.path.join("logs", "results_firefly.json")
+    with open(firefly_results_path, "w") as fout:
+        json.dump(results, fout, indent=4)
+
+if __name__ == "__main__":
+    # main()
+    inference("Screw each stringer to the top of the deck frame with a drill.")
 
 #    72/30000 [1:42:52]
 #   609/30000 [1:33:52]
