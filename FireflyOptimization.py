@@ -14,6 +14,11 @@ from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_sc
 from functools import lru_cache
 from glob import glob
 lemmatizer = nltk.stem.WordNetLemmatizer()
+firefly_results_path = os.path.join("logs", "results_firefly.json")
+
+def save_results(results):
+    with open(firefly_results_path, "w") as fout:
+        json.dump(results, fout, indent=4)
 
 swarm_size = 40
 alpha = 0.2
@@ -112,12 +117,9 @@ class Firefly:
         firefly_indices = []
         firefly_synsets = []
         for word_dict, syn_list in zip(sent_dict, synsets_list):
-            synset_str = '.'.join([word_dict['lemma'], word_dict['pos_nltk'], word_dict['wnsn']])
+            lemma = lemmatizer.lemmatize(word_dict['lemma'], pos=pos_map(word_dict['pos_nltk']))
+            synset_str = '.'.join([lemma, word_dict['pos_nltk'], word_dict['wnsn']])
             synset = wordnet.synset(synset_str)
-            
-            if synset not in syn_list:
-                # THIS SHOULD NOT HAPPEN
-                pdb.set_trace()
 
             syn_id = syn_list.index(synset)
             firefly_indices.append(syn_id)
@@ -221,14 +223,17 @@ def apply_fa(entry):
 
                 if firefly_j.beta > firefly_i.beta:
                     r_i_j = get_euclidean_distance(x_i, x_j)
+                    # TODO: check if this update is enough
                     beta = firefly_i.beta * np.exp(- gamma * r_i_j ** 2)
 
                     rand_ = np.random.uniform(0, 1)
                     x_i += beta * r_i_j * (x_i - x_j) * alpha * (rand_ - 0.5)
                     firefly_i.syn_vec = x_i
 
-        update_firefly_if_needed(fireflies, senses_list)
-        light_intensities = compute_light_intensity(fireflies)
+                    update_firefly_if_needed([firefly_i], senses_list)
+                    compute_individual_light_intensity(firefly_i)
+
+        light_intensities = compute_light_intensity([firefly_i])
         i_best = np.argmax(light_intensities)
         firefly_best = fireflies[i_best]
         
@@ -317,7 +322,7 @@ def main():
     f1_macro_s = []
     precisions = []
     recalls = []
-    for entry in dataset:
+    for i, entry in enumerate(dataset):
         firefly_best, senses_list = apply_fa(entry)
         firefly_gt = Firefly.from_semcor(entry, senses_list)
         compute_individual_light_intensity(firefly_gt)
@@ -342,19 +347,19 @@ def main():
         precisions.append(precision)
         recalls.append(recall)
 
+        if i % 20 == 0:
+            save_results(results)
+
     mean_accuracy = np.mean(accuracy_s)
     mean_f1 = np.mean(f1_macro_s)
     mean_precision = np.mean(precisions)
     mean_recall = np.mean(recalls)
     print(f"Finished with mean accuracy {mean_accuracy}, mean F1 {mean_f1}, mean precision {mean_precision}, mean recall {mean_recall}")
-
-    firefly_results_path = os.path.join("logs", "results_firefly.json")
-    with open(firefly_results_path, "w") as fout:
-        json.dump(results, fout, indent=4)
+    save_results(results)
 
 if __name__ == "__main__":
-    # main()
-    inference("Screw each stringer to the top of the deck frame with a drill.")
+    main()
+    # inference("Screw each stringer to the top of the largest deck frame with a drill.")
 
 #    72/30000 [1:42:52]
 #   609/30000 [1:33:52]
