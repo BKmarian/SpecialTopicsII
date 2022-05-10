@@ -57,7 +57,7 @@ class Node:
         self.sense = sense
         if(self.type == NodeType.sense):
             words = clean(sense.definition()).split(' ')
-            self.odour = [word.strip() for word in words if word not in STOPWORDS]
+            self.odour = [word.lower().strip() for word in words if word not in STOPWORDS and word != '']
         else:
             self.odour = list() #[None] * 100
         self.parent = parent 
