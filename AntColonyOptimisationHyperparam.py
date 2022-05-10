@@ -15,7 +15,7 @@ import os
 import neattext as nt 
 
 ic_brown = wordnet_ic.ic('ic-brown.dat')
-
+f = open("hyperparam2.txt", "w")
 EVAPORATE_RATE = 0.9
 E_max = 60
 E_0 = 30
@@ -316,16 +316,16 @@ def run(dataset):
     #print_output(final_senses,test_results)
     
     acc = accuracy_score(final_senses, test_results)
-    f1 = f1_score(final_senses, test_results, average='samples')
+    #f1 = f1_score(final_senses, test_results, average='samples')
     run_time = datetime.datetime.now() - start_time
 
-    print("Accuracy_Score: ")
-    print(acc)
-    print("F1 Score: ")
-    print(f1)
+    f.write("Accuracy_Score: ")
+    f.write(str(acc))
+    #f.write("F1 Score: ")
+    #f.write(f1)
 
-    print("--- %s Time ---" % (run_time))
-    return {"Acc": acc , "F1": f1 , "run_time":run_time}
+    f.write("--- %s Time ---" % (str(run_time)))
+    return {"Acc": acc , "run_time":run_time}
 
 def main():
     global nodes_list
@@ -347,14 +347,24 @@ def main():
             results = run(dataset)
             files_number = files_number + 1
             total_acc += results["Acc"]
-            total_f1 += results["F1"]
-            print("--- Run Time ---" )
-            print(results["run_time"])
+            #total_f1 += results["F1"]
+            f.write("--- Run Time ---" )
+            f.write(str(results["run_time"]))
 
-    print("Accuracy_Score: ")
-    print(float(total_acc/files_number))
-    print("F1 Score: ")
-    print(float(total_f1/files_number))
+    f.write("Accuracy_Score: ")
+    f.write(str(float(total_acc/files_number)))
+    #f.write("F1 Score: ")
+    #f.write(float(total_f1/files_number))
 
 if __name__ == "__main__":
-    main()
+    for emax in [10,20,30,40,50,60]:
+        for e0 in [5,10,20,30]:
+            for evap_rate in [0.1,0.3,0.6,0.9]:
+                for dep_rate in [0.1,0.3,0.6,0.9]:
+                    E_max = emax
+                    E_0 = e0
+                    EVAPORATE_RATE = evap_rate
+                    deltav = dep_rate
+                    f.write("\nRunning algoritm for E_max: {} , E_0: {}, evaporate_rate: {}, deposit rate: {}\n".format(str(emax),str(e0),str(evap_rate),str(dep_rate)))
+                    main()
+    f.close()

@@ -69,12 +69,11 @@ def get_overlap_score(subconcept_i, subconcept_j, max_ngrams=1):
 
 @lru_cache(maxsize=None)
 def lesk_distance_ant(concept_i, concept_j):
-    distance = 0
-
     concept_i_ext = get_extended_concepts(concept_i)
     concept_j_ext = get_extended_concepts(concept_j)
 
-    return sum([concept_j_ext.count(element) for element in concept_i_ext])
+    return len(np.intersect1d(concept_i_ext , concept_j_ext))
+    #return sum([concept_j_ext.count(element) for element in concept_i_ext])
 
 @lru_cache(maxsize=None)
 def lesk_distance(concept_i, concept_j, max_ngrams):
@@ -88,26 +87,24 @@ def lesk_distance(concept_i, concept_j, max_ngrams):
             distance += get_overlap_score(subconcept_i, subconcept_j, max_ngrams)
     return distance
 
-@lru_cache(maxsize=None)    
-def lesk_distance2(concept_i, concept_j):
-    distance = 0
-    #print(concept_i , concept_j)
-    if wordnet.synsets(concept_i) == None or wordnet.synsets(concept_j) == None:
-        return distance
-
-    for syn1 in wordnet.synsets(concept_i):
-        for syn2 in wordnet.synsets(concept_j):
-            distance += lesk_distance_ant(syn1, syn2)
-    return distance
+@lru_cache(maxsize=None)
+def lesk_distance_X(word1,word2):
+    sum = 0
+    synsets1 = wordnet.synsets(word1)
+    synsets2 = wordnet.synsets(word2)
+    for s1 in synsets1:
+        for s2 in synsets2:
+            sum+=lesk_distance_ant(s1,s2)
+    return sum
 
 def lesk_distance_full(odour_node, odour_ant):
     sum = 0
     for word in odour_node:
         for word2 in odour_ant:
-            sum+= lesk_distance2(word,word2)
+            sum+= lesk_distance_X(word,word2)
     return sum
 
 if __name__ == "__main__":
     concept_1 = wordnet.synset('dog.n.01')
     concept_2 = wordnet.synset('cat.n.01')
-    print(lesk_distance(concept_1, concept_2))
+    print(lesk_distance_X("dog", "cat"))
