@@ -9,11 +9,10 @@ import re
 from nltk import word_tokenize
 from nltk.corpus import wordnet, wordnet_ic
 from tqdm import trange
-from improved_lesk import lesk_distance, pos_map, STOPWORDS
+from improved_lesk import lesk_distance, pos_map, STOPWORDS, lemmatizer
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 from functools import lru_cache
 from glob import glob
-lemmatizer = nltk.stem.WordNetLemmatizer()
 firefly_results_path = os.path.join("logs", "results_firefly.json")
 
 def save_results(results):
@@ -66,7 +65,7 @@ def extract_sentences_from_xml(xml_path):
                     "lemma": wf_lemma,
                     "wnsn": wf_atributes.get("wnsn", "")
                 })
-        dataset.append(sentence)
+        dataset += sentence
     return dataset
 
 
@@ -314,8 +313,7 @@ def inference(text):
 def main():
     dataset = []
     xml_re = os.path.join('semcor', 'semcor', 'brown1', 'tagfiles', '*.xml')
-    for xml_path in glob(xml_re):
-        dataset += extract_sentences_from_xml(xml_path)
+    dataset = [extract_sentences_from_xml(xml_path) for xml_path in glob(xml_re)]
 
     results = []
     accuracy_s = []
@@ -347,8 +345,7 @@ def main():
         precisions.append(precision)
         recalls.append(recall)
 
-        if i % 20 == 0:
-            save_results(results)
+        save_results(results)
 
     mean_accuracy = np.mean(accuracy_s)
     mean_f1 = np.mean(f1_macro_s)
