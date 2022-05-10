@@ -126,15 +126,7 @@ def full_probability(probabilities):
     return numpy.random.choice(len(probabilities), 1, p=probabilities)[0]
 
 def get_neighbours(node: Node):
-    #return nodes_neighbours.get(node)§
-    #newNeighbours = set()
-    # if(node.type == NodeType.sense):
-    #     for nest in nests_list:
-    #         if nest.parent != node.parent:
-    #             newEdge = Edge(node,nest,EdgeType.bridge)
-    #             newNeighbours.append(newEdge,nest)
     return node.neighbours
-    #return [(edge,edge.dest) for edge in edges_list if edge.source == node] + [(edge,edge.source) for edge in edges_list if edge.dest == node]
 
 def iterate():
     ants_list = list()
