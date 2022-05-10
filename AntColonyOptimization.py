@@ -16,12 +16,12 @@ import neattext as nt
 
 ic_brown = wordnet_ic.ic('ic-brown.dat')
 
-EVAPORATE_RATE = 0.9
-E_max = 60
-E_0 = 30
+EVAPORATE_RATE = 0.3
+E_max = 40
+E_0 = 5
 omega = 25 # ant life duration
 Ea = 16 # energy_taken_by_ant_when arriving on node
-deltav = 0.9
+deltav = 0.6
 max_iterations = 200 #CYCLES
 pheromone_deposit = 10
 odour_length = 100
@@ -141,7 +141,7 @@ def iterate():
     global edges_list
     #bridges_list = list()
     for i in range(0,max_iterations):
-        print("Iteration ",i)
+       # print("Iteration ",i)
         for ant in [ant for ant in ants_list if ant.is_dead == True]:
             ant.currentNode.energy = ant.currentNode.energy + ant.energy
         ants_list = [ant for ant in ants_list if ant.is_dead == False]
@@ -316,13 +316,13 @@ def run(dataset):
     #print_output(final_senses,test_results)
     
     acc = accuracy_score(final_senses, test_results)
-    f1 = f1_score(final_senses, test_results, average='samples')
+    f1 = f1_score(final_senses, test_results, average='micro')
     run_time = datetime.datetime.now() - start_time
 
     print("Accuracy_Score: ")
     print(acc)
-    print("F1 Score: ")
-    print(f1)
+   # print("F1 Score: ")
+   # print(f1)
 
     print("--- %s Time ---" % (run_time))
     return {"Acc": acc , "F1": f1 , "run_time":run_time}
@@ -337,7 +337,7 @@ def main():
     total_runtime = 0
     files_number = 0
     for index,filename in enumerate(os.listdir(xml_path)):
-        if(index == 10):
+        if(index == 200):
             break #TODO for test purpose only
         file_path = os.path.join(xml_path, filename)
         nodes_list = []
@@ -353,8 +353,8 @@ def main():
 
     print("Accuracy_Score: ")
     print(float(total_acc/files_number))
-    print("F1 Score: ")
-    print(float(total_f1/files_number))
+    #print("F1 Score: ")
+   # print(float(total_f1/files_number))
 
 if __name__ == "__main__":
     main()
