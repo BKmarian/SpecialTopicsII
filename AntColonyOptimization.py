@@ -2,6 +2,7 @@ import random
 from nltk.corpus import stopwords
 from functools import reduce
 from improved_lesk import lesk_distance_full
+from sentence_similarity import setence_sim_spacy
 import enum
 import os
 import pdb
@@ -128,6 +129,10 @@ def full_probability(probabilities):
 def get_neighbours(node: Node):
     return node.neighbours
 
+def apply_similarity_metric(description1, description2):
+    return setence_sim_spacy(description1,description2)
+    #return lesk_distance_full(description1,description2)
+
 def iterate():
     ants_list = list()
     global edges_list
@@ -167,13 +172,13 @@ def iterate():
                     index = full_probability(probabilities_new)
                     (ant.edgeChosen, ant.nodeChosen) = neighboursRoutes[index]
             else:
-                suma = sum([lesk_distance_full(node.odour, ant.odour) for _ , node in neighboursRoutes])
+                suma = sum([apply_similarity_metric(node.odour, ant.odour) for _ , node in neighboursRoutes])
                 for (edge,node) in neighboursRoutes:
                     edgeEval = edge.pheromone
                     if suma == 0:
                         nodeEval = 0
                     else:
-                        nodeEval = float(lesk_distance_full(node.odour , ant.odour) / suma)
+                        nodeEval = float(apply_similarity_metric(node.odour , ant.odour) / suma)
                     probabilities.append(nodeEval + edgeEval)
                     eval_sum += nodeEval + edgeEval
 
