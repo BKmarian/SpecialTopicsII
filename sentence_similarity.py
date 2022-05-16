@@ -1,9 +1,9 @@
 
 import spacy
-#from sentence_transformers import SentenceTransformer, util
+from sentence_transformers import SentenceTransformer, util
 from functools import lru_cache
 
-#model = SentenceTransformer('distilbert-base-nli-mean-tokens')
+model = SentenceTransformer('distilbert-base-nli-mean-tokens')
 nlp = spacy.load("en_core_web_md")
 
 @lru_cache(maxsize=None)
