@@ -2,7 +2,7 @@ import random
 from nltk.corpus import stopwords
 from functools import reduce
 import spacy
-from sentence_transformers import SentenceTransformer, util
+#from sentence_transformers import SentenceTransformer, util
 from functools import lru_cache
 import enum
 import os
@@ -71,7 +71,7 @@ class Node:
         self.sense = sense
         if (self.type == NodeType.sense):
             words = clean(sense.definition()).split(' ')
-            self.odour = [word.lower().strip() for word in words if word not in STOPWORDS and word != '']
+            self.odour = set([word.lower().strip() for word in words if word not in STOPWORDS and word != ''])
         else:
             self.odour = list()  # [None] * 100
         self.parent = parent
@@ -140,8 +140,8 @@ class Edge:
 
 @lru_cache(maxsize=None)
 def setence_sim_spacy(sent1, sent2):
-    doc1 = nlp(" ".join(sent1))
-    doc2 = nlp(" ".join(sent2))
+    doc1 = nlp(sent1)
+    doc2 = nlp(sent2)
     return doc1.similarity(doc2)
 
 
@@ -154,7 +154,7 @@ def get_neighbours(node: Node):
 
 
 def apply_similarity_metric(description1, description2):
-    return setence_sim_spacy(description1, description2)
+    return setence_sim_spacy(" ".join(description1), " ".join(description2))
     # return lesk_distance_full(description1,description2)
 
 
@@ -255,24 +255,36 @@ def extract_sentences_from_xml(xml_path):
 
     dataset = []
     # contextfile > context > p > s
-    context = tree.find('corpus')
+    context = tree#.find('corpus')
     for i, elem in enumerate(context.findall('text')):
-        sentence_elem = elem.find('s')
+        #sentence_elem = elem.find('s')
+        for i, sent in enumerate(elem.findall('sentence')):
+            sentence = []
+            for wf_elem in sent.findall('wf'):
+                wf_atributes = wf_elem.attrib
+                wf_lemma = wf_atributes.get("lemma", "")
+                id = wf_atributes.get("id","")
+                if id != "" and wf_lemma != "":
+                    pos_ = wf_atributes["pos"]
+                    pos_nltk = pos_map(pos_)
 
-        sentence = []
-        for wf_elem in sentence_elem.findall('wf'):
-            wf_atributes = wf_elem.attrib
-            wf_lemma = wf_atributes.get("lemma", "")
-            if wf_atributes['cmd'] != 'ignore' and wf_atributes["pos"] != "NNP" and wf_lemma != "":
-                pos_ = wf_atributes["pos"]
-                pos_nltk = pos_map(pos_)
+                    sentence.append({
+                        "pos": pos_,
+                        "pos_nltk": pos_nltk,
+                        "lemma": wf_lemma,
+                        "wnsn": 1
+                    })
+                # else:
+                #     pos_ = wf_atributes["pos"]
+                #     pos_nltk = pos_map(pos_)
 
-                sentence.append({
-                    "pos": pos_,
-                    "pos_nltk": pos_nltk,
-                    "lemma": wf_lemma,
-                    "wnsn": wf_atributes.get("wnsn", "")
-                })
+                #     sentence.append({
+                #         "pos": pos_,
+                #         "pos_nltk": pos_nltk,
+                #         "lemma": wf_lemma,
+                #         "wnsn": 0
+                #     })
+
         dataset.append(sentence)
     return dataset
 
@@ -340,11 +352,12 @@ def run(dataset):
     # print_output(final_senses,test_results)
 
     acc = accuracy_score(final_senses, test_results)
-    f1 = f1_score(final_senses, test_results, average='micro')
+    f1 = 0
+    #f1 = f1_score(final_senses, test_results, average='micro')
     run_time = datetime.datetime.now() - start_time
 
-    print("F1_Score: ",f)
-    print(acc,f)
+    print("F1_Score: ")
+    print(acc)
     # print("F1 Score: ")
     # print(f1)
 
@@ -356,7 +369,7 @@ def main():
     global nodes_list
     global edges_list
 
-    xml_path = os.path.join('senseval2')
+    xml_path = os.path.join('dataset','senseval2')
     total_acc = 0
     total_f1 = 0
     total_runtime = 0
