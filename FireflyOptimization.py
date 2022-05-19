@@ -13,8 +13,9 @@ from improved_lesk import lesk_distance, pos_map, STOPWORDS, lemmatizer
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 from functools import lru_cache
 from glob import glob
-firefly_results_path = os.path.join("logs", "results_firefly.json")
+synset_types = {1:'n', 2:'v', 3:'a', 4:'r', 5:'s'}
 
+firefly_results_path = os.path.join("logs", "results_firefly.json")
 def save_results(results):
     with open(firefly_results_path, "w") as fout:
         json.dump(results, fout, indent=4)
@@ -22,14 +23,14 @@ def save_results(results):
 swarm_size = 40
 alpha = 0.2
 gamma = 1
-window_size = 11
+window_size = 5
 window_stride = 1
 local_rate = 0.15
-lfa = 17000
+lfa = 1700
 
 max_iterations = 30000
 eps_convergence = 1e-3
-patience = 25
+patience = 10
 
 ic_brown = wordnet_ic.ic('ic-brown.dat')
 
@@ -55,7 +56,8 @@ def extract_sentences_from_xml(xml_path):
         for wf_elem in sentence_elem.findall('wf'):
             wf_atributes = wf_elem.attrib
             wf_lemma = wf_atributes.get("lemma", "")
-            if wf_atributes['cmd'] != 'ignore' and wf_atributes["pos"] != "NNP" and wf_lemma != "":
+            wf_wasn = wf_atributes.get("wnsn", "")
+            if wf_atributes['cmd'] != 'ignore' and wf_atributes["pos"] != "NNP" and wf_lemma != "" and wf_wasn != "":
                 pos_ = wf_atributes["pos"]
                 pos_nltk = pos_map(pos_)
                 
@@ -63,9 +65,71 @@ def extract_sentences_from_xml(xml_path):
                     "pos": pos_,
                     "pos_nltk": pos_nltk,
                     "lemma": wf_lemma,
-                    "wnsn": wf_atributes.get("wnsn", "")
+                    "wnsn": wf_wasn
                 })
         dataset += sentence
+    return dataset
+
+def xml_path_to_id(xml_path):
+    basename = os.path.basename(xml_path)
+    return basename
+
+def extract_sentences_from_senseval(xml_path, keys_dict, version):
+    with open(xml_path, 'r') as fin:
+        content = fin.read()
+        tree = etree.fromstring(content)
+
+    dataset = {}
+    for text_id, elem in enumerate(tree.findall('text')):
+        text_dicts = []
+
+        for sent in elem.findall('sentence'):
+            for wf_elem in sent.findall('instance'):
+                wf_atributes = wf_elem.attrib
+                instance_id = wf_atributes.get("id")
+                
+                syn_name = keys_dict.get(instance_id).name()
+                lemma, pos_nltk, wasn = syn_name.split('.')
+
+                text_dicts.append({
+                    "pos": wf_atributes.get("pos", ""),
+                    "lemma": lemma,
+                    "pos_nltk": pos_nltk,
+                    "wnsn": wasn
+                })
+        text_key = f'senseval{version}_{text_id}'
+        dataset[text_key] = text_dicts
+    return dataset
+
+def synset_from_key(sense_key):
+    lemma, ss_type, _, lex_id, _, _ = re.match(r"(.*)\%(.*):(.*):(.*):(.*):(.*)", sense_key).groups()
+    ss_idx = '.'.join([lemma, synset_types[int(ss_type)], lex_id])
+    try:
+        syn = wordnet.synset(ss_idx)
+    except:
+        syns = wordnet.synsets(lemma, pos=synset_types[int(ss_type)])
+        lex_id_int = int(lex_id[1:] if lex_id[0] == '0' else lex_id)
+
+        lex_id_int = min(lex_id_int, len(syns) - 1)
+        syn = syns[lex_id_int]
+    return syn
+
+def get_senseval_dataset():
+    dataset = {}
+    for version in [2, 3]:
+        xml_path = os.path.join(f'senseval{version}', f'senseval{version}.data.xml')
+        keys_path =  os.path.join(f'senseval{version}', f'senseval{version}.gold.key.txt')
+
+        with open(keys_path, 'r') as fin:
+            keys_list = fin.read().split('\n')
+        
+        keys_dict = {}
+        for elem in keys_list[:-1]:
+            instance_id, sense_key = elem.split(' ')[:2]
+            keys_dict[instance_id] = synset_from_key(sense_key)
+        
+        senseval_set = extract_sentences_from_senseval(xml_path, keys_dict, version)
+        dataset.update(senseval_set)
     return dataset
 
 
@@ -118,9 +182,13 @@ class Firefly:
         for word_dict, syn_list in zip(sent_dict, synsets_list):
             lemma = lemmatizer.lemmatize(word_dict['lemma'], pos=pos_map(word_dict['pos_nltk']))
             synset_str = '.'.join([lemma, word_dict['pos_nltk'], word_dict['wnsn']])
-            synset = wordnet.synset(synset_str)
-
-            syn_id = syn_list.index(synset)
+            try:
+                synset = wordnet.synset(synset_str)
+            except: 
+                rand_id = np.random.randint(0, len(syn_list), size=1)[0]
+                synset = syn_list[rand_id]
+            
+            syn_id = syn_list.index(synset) if synset in syn_list else -1
             firefly_indices.append(syn_id)
             firefly_synsets.append(synset)
         
@@ -169,7 +237,7 @@ def compute_individual_light_intensity(firefly):
                 concept_j = firefly_window[j]
 
                 light_intensity += lesk_distance(concept_i, concept_j, max_ngrams=5) + \
-                                    get_information_content(concept_i, concept_j)
+                                   get_information_content(concept_i, concept_j)
 
     firefly.beta = light_intensity
     return light_intensity
@@ -222,17 +290,14 @@ def apply_fa(entry):
 
                 if firefly_j.beta > firefly_i.beta:
                     r_i_j = get_euclidean_distance(x_i, x_j)
-                    # TODO: check if this update is enough
                     beta = firefly_i.beta * np.exp(- gamma * r_i_j ** 2)
 
                     rand_ = np.random.uniform(0, 1)
                     x_i += beta * r_i_j * (x_i - x_j) * alpha * (rand_ - 0.5)
                     firefly_i.syn_vec = x_i
 
-                    update_firefly_if_needed([firefly_i], senses_list)
-                    compute_individual_light_intensity(firefly_i)
-
-        light_intensities = compute_light_intensity([firefly_i])
+        update_firefly_if_needed(fireflies, senses_list)
+        light_intensities = compute_light_intensity(fireflies)
         i_best = np.argmax(light_intensities)
         firefly_best = fireflies[i_best]
         
@@ -311,41 +376,49 @@ def inference(text):
 
 
 def main():
-    dataset = []
     xml_re = os.path.join('semcor', 'semcor', 'brown1', 'tagfiles', '*.xml')
-    dataset = [extract_sentences_from_xml(xml_path) for xml_path in glob(xml_re)]
+    # xml_re = os.path.join('semcor', 'semcor', 'brown2', 'tagfiles', '*.xml')
+    # xml_re = os.path.join('semcor', 'semcor', 'brownv', 'tagfiles', '*.xml')
+    dataset = {xml_path_to_id(xml_path): extract_sentences_from_xml(xml_path) for xml_path in glob(xml_re)}
+    
+    # dataset = get_senseval_dataset()
 
     results = []
+    if os.path.join(firefly_results_path):
+        with open(firefly_results_path, 'r') as fin:
+            results = json.load(fin)
+
     accuracy_s = []
     f1_macro_s = []
     precisions = []
     recalls = []
-    for i, entry in enumerate(dataset):
-        firefly_best, senses_list = apply_fa(entry)
-        firefly_gt = Firefly.from_semcor(entry, senses_list)
-        compute_individual_light_intensity(firefly_gt)
+    for key, entry in dataset.items():
+        if key not in results.keys():
+            firefly_best, senses_list = apply_fa(entry)
+            firefly_gt = Firefly.from_semcor(entry, senses_list)
+            compute_individual_light_intensity(firefly_gt)
 
-        gt_list = [syn.name() for syn in firefly_gt.syn_set]
-        best_list = [syn.name() for syn in firefly_best.syn_set]
-        accuracy = accuracy_score(gt_list, best_list)
-        f1_macro = f1_score(gt_list, best_list, average="macro")
-        precision = precision_score(gt_list, best_list, average="macro", zero_division=True)
-        recall = recall_score(gt_list, best_list, average="macro", zero_division=True)
-        
-        results.append({
-            "firefly_gt": firefly_gt.to_json(),
-            "firefly_found": firefly_best.to_json(),
-            "accuracy": accuracy,
-            "f1_macro": f1_macro,
-            "precision": precision,
-            "recall": recall
-        })
-        accuracy_s.append(accuracy)
-        f1_macro_s.append(f1_macro)
-        precisions.append(precision)
-        recalls.append(recall)
+            gt_list = [syn.name() for syn in firefly_gt.syn_set]
+            best_list = [syn.name() for syn in firefly_best.syn_set]
+            accuracy = accuracy_score(gt_list, best_list)
+            f1_macro = f1_score(gt_list, best_list, average="macro")
+            precision = precision_score(gt_list, best_list, average="macro", zero_division=True)
+            recall = recall_score(gt_list, best_list, average="macro", zero_division=True)
+            
+            results[key] = {
+                "firefly_gt": firefly_gt.to_json(),
+                "firefly_found": firefly_best.to_json(),
+                "accuracy": accuracy,
+                "f1_macro": f1_macro,
+                "precision": precision,
+                "recall": recall
+            }
+            accuracy_s.append(accuracy)
+            f1_macro_s.append(f1_macro)
+            precisions.append(precision)
+            recalls.append(recall)
 
-        save_results(results)
+            save_results(results)
 
     mean_accuracy = np.mean(accuracy_s)
     mean_f1 = np.mean(f1_macro_s)
@@ -357,7 +430,3 @@ def main():
 if __name__ == "__main__":
     main()
     # inference("Screw each stringer to the top of the largest deck frame with a drill.")
-
-#    72/30000 [1:42:52]
-#   609/30000 [1:33:52]
-# 13117/30000 [3:31:38]

@@ -126,8 +126,9 @@ def get_overlap_score(concept_i, concept_j, relation, max_ngrams=1):
 
 #     return sum([concept_j_ext.count(element) for element in concept_i_ext])
 
-def get_pos_best_relations(pos_i, pos_j):
-    if pos_i == 'n' and pos_j == 'n':
+@lru_cache(maxsize=None)
+def get_pos_best_relations(pos_):
+    if pos_ == 'n':
         return [
             ("hypo", "mero"),
             ("mero", "hypo"),
@@ -137,7 +138,7 @@ def get_pos_best_relations(pos_i, pos_j):
             ("example", "mero"),
             ("mero", "example")
         ]
-    elif pos_i == 'a' and pos_j == 'a':
+    elif pos_ == 'a':
         return [
             ("also", "gloss"),
             ("gloss", "also"),
@@ -147,7 +148,7 @@ def get_pos_best_relations(pos_i, pos_j):
             ("hype", "gloss"),
             ("gloss", "hype")
         ]
-    elif pos_i == 'v' and pos_j == 'v':
+    elif pos_ == 'v':
         return [
             ("example", "example"),
             ("example", "hype"),
@@ -167,12 +168,16 @@ def lesk_distance_ant(concept_i, concept_j):
 
     return len(np.intersect1d(concept_i_ext , concept_j_ext))
     #return sum([concept_j_ext.count(element) for element in concept_i_ext])
-def lesk_distance(concept_i, concept_j, max_ngrams):
-    distance = 0
 
-    relations = get_pos_best_relations(concept_i.pos(), concept_j.pos())
-    for relation in relations:
-        distance += get_overlap_score(concept_i, concept_j, relation, max_ngrams)
+@lru_cache(maxsize=None)
+def lesk_distance(concept_i, concept_j, max_ngrams):
+    pos_i = concept_i.pos()
+    pos_j = concept_j.pos()
+    if pos_i != pos_j:
+        return 0
+
+    relations = get_pos_best_relations(pos_i)
+    distance = sum([get_overlap_score(concept_i, concept_j, relation, max_ngrams) for relation in relations])
     return distance
 
 @lru_cache(maxsize=None)
