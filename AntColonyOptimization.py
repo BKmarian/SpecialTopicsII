@@ -16,6 +16,9 @@ import datetime
 import os
 import neattext as nt
 import nltk
+import math
+import re
+import json
 
 # nltk.download('stopwords')
 # nltk.download('wordnet')
@@ -39,6 +42,8 @@ STOPWORDS = set(stopwords.words('english'))
 
 nlp = spacy.load("en_core_web_md")
 f = open("results.txt", "w")
+
+synset_types = {1:'n', 2:'v', 3:'a', 4:'r', 5:'s'}
 
 class NodeType(enum.Enum):
     sense = 1
@@ -154,6 +159,12 @@ def get_neighbours(node: Node):
 
 
 def apply_similarity_metric(description1, description2):
+    description1 = list(filter(lambda x : nlp.vocab[x].has_vector ,description1))
+    description2 = list(filter(lambda x : nlp.vocab[x].has_vector ,description2))
+
+    if len(description1) == 0 or len(description2) == 0:
+        return 0
+
     return setence_sim_spacy(" ".join(description1), " ".join(description2))
     # return lesk_distance_full(description1,description2)
 
@@ -247,47 +258,66 @@ def pos_map(pos_):
         return 'a'
     return first_letter
 
+def synset_from_key(sense_key):
+    lemma, ss_type, _, lex_id, _, _ = re.match(r"(.*)\%(.*):(.*):(.*):(.*):(.*)", sense_key).groups()
+    ss_idx = '.'.join([lemma, synset_types[int(ss_type)], lex_id])
+    try:
+        syn = wordnet.synset(ss_idx)
+    except:
+        syns = wordnet.synsets(lemma, pos=synset_types[int(ss_type)])
+        lex_id_int = int(lex_id[1:] if lex_id[0] == '0' else lex_id)
 
-def extract_sentences_from_xml(xml_path):
+        lex_id_int = min(lex_id_int, len(syns) - 1)
+        syn = syns[lex_id_int]
+    return syn
+
+def extract_sentences_from_xml(xml_path, keys_dict):
     with open(xml_path, 'r') as fin:
         content = fin.read()
         tree = etree.fromstring(content)
 
-    dataset = []
-    # contextfile > context > p > s
-    context = tree#.find('corpus')
-    for i, elem in enumerate(context.findall('text')):
-        #sentence_elem = elem.find('s')
-        for i, sent in enumerate(elem.findall('sentence')):
-            sentence = []
-            for wf_elem in sent.findall('wf'):
+    dataset = {}
+    for text_id, elem in enumerate(tree.findall('text')):
+        text_dicts = []
+        sentences = []
+        for index,sent in enumerate(elem.findall('sentence')):
+            sent_dicts = []
+            for wf_elem in sent.findall('instance'):
                 wf_atributes = wf_elem.attrib
-                wf_lemma = wf_atributes.get("lemma", "")
-                id = wf_atributes.get("id","")
-                if id != "" and wf_lemma != "":
-                    pos_ = wf_atributes["pos"]
-                    pos_nltk = pos_map(pos_)
+                instance_id = wf_atributes.get("id")
+                
+                syn_name = keys_dict.get(instance_id).name()
+                lemma, pos_nltk, wasn = syn_name.split('.')
 
-                    sentence.append({
-                        "pos": pos_,
-                        "pos_nltk": pos_nltk,
-                        "lemma": wf_lemma,
-                        "wnsn": 1
-                    })
-                # else:
-                #     pos_ = wf_atributes["pos"]
-                #     pos_nltk = pos_map(pos_)
+                sent_dicts.append({
+                    "pos": wf_atributes.get("pos", ""),
+                    "lemma": lemma,
+                    "pos_nltk": pos_nltk,
+                    "wnsn": wasn
+                })
+            dataset["sentence"+str(index)] = sent_dicts
 
-                #     sentence.append({
-                #         "pos": pos_,
-                #         "pos_nltk": pos_nltk,
-                #         "lemma": wf_lemma,
-                #         "wnsn": 0
-                #     })
-
-        dataset.append(sentence)
+        # text_key = f'senseval2_{text_id}'
+        # dataset[text_key] = text_dicts
     return dataset
 
+def get_senseval_dataset():
+    dataset = {}
+    version = 2
+    xml_path = os.path.join('dataset',f'senseval{version}', f'senseval{version}.data.xml')
+    keys_path = os.path.join('dataset',f'senseval{version}', f'senseval{version}.gold.key.txt')
+
+    with open(keys_path, 'r') as fin:
+        keys_list = fin.read().split('\n')
+    
+    keys_dict = {}
+    for elem in keys_list[:-1]:
+        instance_id, sense_key = elem.split(' ')[:2]
+        keys_dict[instance_id] = synset_from_key(sense_key)
+    
+    senseval_set = extract_sentences_from_xml(xml_path, keys_dict)
+    dataset.update(senseval_set)
+    return dataset
 
 def print_output(final_senses, test_results):
     print("Final senses:")
@@ -311,17 +341,16 @@ def run(dataset):
     # Create graph
     root = Node(None, None, NodeType.text)
     nodes_list.append(root)
-    for entry in dataset:
+    for key in dataset.keys():
+        entry = dataset[key]
         sentence = Node(None, root, NodeType.sentence)
         nodes_list.append(sentence)
         edges_list.append(Edge(root, sentence, EdgeType.edge))
         for word in entry:
-            # if word["lemma"] in STOPWORDS:
-            #     continue
-            if str(word["wnsn"]) == "0" or str(word["lemma"]) == "":
-                test_results.append("0")
-            else:
-                test_results.append(word["lemma"] + "." + word["pos_nltk"] + ".0" + str(word["wnsn"]))
+            # if str(word["wnsn"]) == "0" or str(word["lemma"]) == "":
+            #     test_results.append("0")
+            # else:
+            test_results.append(str(word["lemma"]) + "." + str(word["pos_nltk"]) + "." + str(word["wnsn"]))
             # if(len(wordnet.synsets(word)) != 0): #TODO
             word_node = Node(None, sentence, NodeType.word)
             edges_list.append(Edge(sentence, word_node, EdgeType.edge))
@@ -358,43 +387,63 @@ def run(dataset):
 
     print("F1_Score: ")
     print(acc)
-    # print("F1 Score: ")
-    # print(f1)
+
+    # out_file = open("test_results.json", "w")
+    # json.dump(test_results, out_file, indent = 4)
+    # out_file.close()
+
+    # out_file = open("final_senses.json", "w")
+    # json.dump(final_senses, out_file, indent = 4)
+    # out_file.close()
 
     print("--- %s Time ---" % (run_time))
     return {"Acc": acc, "F1": f1, "run_time": run_time}
+
+
+# def main():
+#     global nodes_list
+#     global edges_list
+
+#     xml_path = os.path.join('dataset','semeval2007')
+#     total_acc = 0
+#     total_f1 = 0
+#     total_runtime = 0
+#     files_number = 0
+#     for index, filename in enumerate(os.listdir(xml_path)):
+#         if (index == 200):
+#             break  # TODO for test purpose only
+#         file_path = os.path.join(xml_path, filename)
+#         nodes_list = []
+#         edges_list = []
+#         if os.path.isfile(file_path):
+#             dataset = extract_sentences_from_xml(file_path)
+#             results = run(dataset)
+#             files_number = files_number + 1
+#             total_acc += results["Acc"]
+#             total_f1 += results["F1"]
+#             print("--- Run Time ---")
+#             print(results["run_time"])
+
+#     print("F1_Score: ")
+#     print(float(total_acc / files_number))
+    # print("F1 Score: ")
 
 
 def main():
     global nodes_list
     global edges_list
 
-    xml_path = os.path.join('dataset','senseval2')
-    total_acc = 0
-    total_f1 = 0
-    total_runtime = 0
-    files_number = 0
-    for index, filename in enumerate(os.listdir(xml_path)):
-        if (index == 200):
-            break  # TODO for test purpose only
-        file_path = os.path.join(xml_path, filename)
-        nodes_list = []
-        edges_list = []
-        if os.path.isfile(file_path):
-            dataset = extract_sentences_from_xml(file_path)
-            results = run(dataset)
-            files_number = files_number + 1
-            total_acc += results["Acc"]
-            total_f1 += results["F1"]
-            print("--- Run Time ---")
-            print(results["run_time"])
+    dataset = get_senseval_dataset()
 
-    print("F1_Score: ")
-    print(float(total_acc / files_number))
-    # print("F1 Score: ")
+    # out_file = open("dataset.json", "w")
+    # json.dump(dataset, out_file, indent = 4)
+    # out_file.close()
 
+    results = run(dataset)
+    print("--- Run Time ---")
+    print(results["run_time"])
+    print("F1_Score: ", results["Acc"])
 
-# print(float(total_f1/files_number))
 
 if __name__ == "__main__":
     main()
