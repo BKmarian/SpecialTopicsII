@@ -13,15 +13,18 @@ from sklearn.metrics import accuracy_score,f1_score
 import datetime
 import os
 import neattext as nt 
+import spacy
+from functools import lru_cache
 
+nlp = spacy.load("en_core_web_md")
 ic_brown = wordnet_ic.ic('ic-brown.dat')
 f = open("hyperparam2.txt", "w")
-EVAPORATE_RATE = 0.9
-E_max = 60
-E_0 = 30
+EVAPORATE_RATE = 0.3
+E_max = 40
+E_0 = 5
 omega = 25 # ant life duration
 Ea = 16 # energy_taken_by_ant_when arriving on node
-deltav = 0.9
+deltav = 0.6
 max_iterations = 200 #CYCLES
 pheromone_deposit = 10
 odour_length = 100
@@ -128,12 +131,28 @@ def full_probability(probabilities):
 def get_neighbours(node: Node):
     return node.neighbours
 
+@lru_cache(maxsize=None)
+def setence_sim_spacy(sent1, sent2):
+    doc1 = nlp(sent1)
+    doc2 = nlp(sent2)
+    return doc1.similarity(doc2)
+
+def apply_similarity_metric(description1, description2):
+    description1 = list(filter(lambda x : nlp.vocab[x].has_vector ,description1))
+    description2 = list(filter(lambda x : nlp.vocab[x].has_vector ,description2))
+
+    if len(description1) == 0 or len(description2) == 0:
+        return 0
+    return setence_sim_spacy(" ".join(description1), " ".join(description2))
+    # return lesk_distance_full(description1,description2)
+
+
 def iterate():
     ants_list = list()
     global edges_list
     #bridges_list = list()
     for i in range(0,max_iterations):
-        print("Iteration ",i)
+        #print("Iteration ",i)
         for ant in [ant for ant in ants_list if ant.is_dead == True]:
             ant.currentNode.energy = ant.currentNode.energy + ant.energy
         ants_list = [ant for ant in ants_list if ant.is_dead == False]
@@ -167,13 +186,13 @@ def iterate():
                     index = full_probability(probabilities_new)
                     (ant.edgeChosen, ant.nodeChosen) = neighboursRoutes[index]
             else:
-                suma = sum([lesk_distance_full(node.odour, ant.odour) for _ , node in neighboursRoutes])
+                suma = sum([apply_similarity_metric(node.odour, ant.odour) for _ , node in neighboursRoutes])
                 for (edge,node) in neighboursRoutes:
                     edgeEval = edge.pheromone
                     if suma == 0:
                         nodeEval = 0
                     else:
-                        nodeEval = float(lesk_distance_full(node.odour , ant.odour) / suma)
+                        nodeEval = float(apply_similarity_metric(node.odour , ant.odour) / suma)
                     probabilities.append(nodeEval + edgeEval)
                     eval_sum += nodeEval + edgeEval
 
@@ -274,10 +293,10 @@ def run(dataset):
         for word in entry:
             # if word["lemma"] in STOPWORDS:
             #     continue
-            if str(word["wnsn"]) == "0" or str(word["lemma"]) == "":
-                test_results.append("0")
-            else:
-                test_results.append(word["lemma"] + "." + word["pos_nltk"] + ".0" + str(word["wnsn"]))
+            # if str(word["wnsn"]) == "0" or str(word["lemma"]) == "":
+            #     test_results.append("0")
+            # else:
+            test_results.append(word["lemma"] + "." + word["pos_nltk"] + ".0" + str(word["wnsn"]))
             #if(len(wordnet.synsets(word)) != 0): #TODO
             word_node = Node(None,sentence,NodeType.word)
             edges_list.append(Edge(sentence,word_node,EdgeType.edge))
@@ -329,7 +348,7 @@ def main():
     total_runtime = 0
     files_number = 0
     for index,filename in enumerate(os.listdir(xml_path)):
-        if(index == 10):
+        if(index == 20):
             break #TODO for test purpose only
         file_path = os.path.join(xml_path, filename)
         nodes_list = []
@@ -349,14 +368,15 @@ def main():
     #f.write(float(total_f1/files_number))
 
 if __name__ == "__main__":
-    for emax in [10,20,30,40,50,60]:
-        for e0 in [5,10,20,30]:
-            for evap_rate in [0.1,0.3,0.6,0.9]:
-                for dep_rate in [0.1,0.3,0.6,0.9]:
-                    E_max = emax
-                    E_0 = e0
-                    EVAPORATE_RATE = evap_rate
-                    deltav = dep_rate
-                    f.write("\nRunning algoritm for E_max: {} , E_0: {}, evaporate_rate: {}, deposit rate: {}\n".format(str(emax),str(e0),str(evap_rate),str(dep_rate)))
-                    main()
-    f.close()
+    main()
+    # for emax in [10,20,30,40,50,60]:
+    #     for e0 in [5,10,20,30]:
+    #         for evap_rate in [0.1,0.3,0.6,0.9]:
+    #             for dep_rate in [0.1,0.3,0.6,0.9]:
+    #                 E_max = emax
+    #                 E_0 = e0
+    #                 EVAPORATE_RATE = evap_rate
+    #                 deltav = dep_rate
+    #                 f.write("\nRunning algoritm for E_max: {} , E_0: {}, evaporate_rate: {}, deposit rate: {}\n".format(str(emax),str(e0),str(evap_rate),str(dep_rate)))
+    #                 main()
+    # f.close()
