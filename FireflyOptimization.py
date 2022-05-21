@@ -26,7 +26,7 @@ gamma = 1
 window_size = 5
 window_stride = 1
 local_rate = 0.15
-lfa = 1700
+lfa = 17000
 
 max_iterations = 30000
 eps_convergence = 1e-3
@@ -376,15 +376,18 @@ def inference(text):
 
 
 def main():
-    xml_re = os.path.join('semcor', 'semcor', 'brown1', 'tagfiles', '*.xml')
-    # xml_re = os.path.join('semcor', 'semcor', 'brown2', 'tagfiles', '*.xml')
-    # xml_re = os.path.join('semcor', 'semcor', 'brownv', 'tagfiles', '*.xml')
-    dataset = {xml_path_to_id(xml_path): extract_sentences_from_xml(xml_path) for xml_path in glob(xml_re)}
+    xml_1_re = os.path.join('semcor', 'semcor', 'brown1', 'tagfiles', '*.xml')
+    xml_2_re = os.path.join('semcor', 'semcor', 'brown2', 'tagfiles', '*.xml')
+    xml_v_re = os.path.join('semcor', 'semcor', 'brownv', 'tagfiles', '*.xml')
     
-    # dataset = get_senseval_dataset()
+    dataset = {}
+    for xml_re in [xml_1_re, xml_2_re, xml_v_re]:
+        subaset = {xml_path_to_id(xml_path): extract_sentences_from_xml(xml_path) for xml_path in glob(xml_re)}
+        dataset.update(subaset)
+    dataset.update(get_senseval_dataset())
 
-    results = []
-    if os.path.join(firefly_results_path):
+    results = {}
+    if os.path.exists(firefly_results_path):
         with open(firefly_results_path, 'r') as fin:
             results = json.load(fin)
 
