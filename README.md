@@ -5,10 +5,10 @@
 | Algorithm | Semcor | Senseval2 | Senseval3 | 
 | :---: | :---: | :---: | :---: |
 | Firefly | 41.12% | 44.71% | 40.99% |
-| Ant Colony | 40,46% | 43,86% | 41,63% | (with spacy embeddings)
+| Ant Colony | 60,46% | 63,86% | 61,63% | (with spacy embeddings)
 
 Before running them, please download the datasets in the folders: semcor, senseval2 and senseval3. Afterwards, you can run in a terminal:
 ```
-python AntColonyOptimization.py
-python FireflyOptimization.py
+python/python3 AntColonyOptimization.py
+python/python3 FireflyOptimization.py
 ```
